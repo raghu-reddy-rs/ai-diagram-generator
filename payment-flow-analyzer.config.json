@@ -1,0 +1,74 @@
+{
+  "ai": {
+    "provider": "openai",
+    "model": "gpt-4",
+    "openaiApiKey": null,
+    "anthropicApiKey": null,
+    "temperature": 0.1,
+    "maxTokens": 4000
+  },
+  "analysis": {
+    "patterns": [
+      "payment",
+      "transaction",
+      "billing",
+      "checkout",
+      "stripe",
+      "paypal",
+      "subscription",
+      "invoice",
+      "webhook",
+      "refund"
+    ],
+    "excludePaths": [
+      "node_modules",
+      "dist",
+      "build",
+      "coverage",
+      ".git",
+      "tmp",
+      "temp"
+    ],
+    "includeTests": false,
+    "maxFileSize": "100kb",
+    "supportedLanguages": [
+      "javascript",
+      "typescript",
+      "ruby",
+      "python",
+      "php",
+      "java",
+      "go"
+    ]
+  },
+  "output": {
+    "format": "markdown",
+    "includeDocumentation": true,
+    "outputPath": "./docs",
+    "diagramTypes": [
+      "flowchart",
+      "sequence"
+    ],
+    "showFileReferences": true,
+    "includeSecurityAnalysis": true
+  },
+  "github": {
+    "token": null,
+    "webhookSecret": null,
+    "autoComment": false,
+    "createPullRequest": false
+  },
+  "repomix": {
+    "compress": false,
+    "style": "xml",
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "includeGitLogs": false,
+    "securityCheck": true
+  },
+  "logging": {
+    "level": "info",
+    "verbose": false,
+    "logFile": null
+  }
+}
