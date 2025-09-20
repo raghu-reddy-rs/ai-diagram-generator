@@ -65,8 +65,13 @@ program
         spinner.text = 'Preparing analysis...';
       }
 
-      // Get prompt
-      const prompt = options.prompt || getDefaultPrompt();
+      // Get prompt - enhance based on detected domain/complexity
+      let prompt = options.prompt || getDefaultPrompt();
+
+      // Enhance prompts that request detailed component diagrams
+      if (shouldEnhancePrompt(prompt)) {
+        prompt = enhanceDetailedDiagramPrompt(prompt);
+      }
 
       if (options.verbose) {
         spinner.stop();
@@ -84,43 +89,12 @@ program
       // Run Gemini CLI directly on the path
       const result = await runGeminiAnalysis(analysisPath, prompt, options.model, options.verbose);
 
-      spinner.text = 'Validating Mermaid diagrams...';
-
-      // Validate and fix Mermaid syntax
-      const validation = validateMermaidSyntax(result);
-      let finalResult = result;
-
-      if (!validation.isValid) {
-        if (options.verbose) {
-          console.log(chalk.yellow('⚠️  Mermaid validation issues found:'));
-          validation.errors.forEach(error => console.log(chalk.red(`   ❌ ${error}`)));
-          validation.warnings.forEach(warning => console.log(chalk.yellow(`   ⚠️  ${warning}`)));
-        }
-
-        spinner.text = 'Attempting to fix Mermaid syntax...';
-        finalResult = fixCommonMermaidIssues(result);
-
-        // Re-validate after fixes
-        const revalidation = validateMermaidSyntax(finalResult);
-        if (revalidation.isValid) {
-          if (options.verbose) {
-            console.log(chalk.green('✅ Mermaid syntax issues fixed automatically'));
-          }
-        } else {
-          if (options.verbose) {
-            console.log(chalk.yellow('⚠️  Some Mermaid issues remain after auto-fix'));
-          }
-        }
-      } else {
-        if (options.verbose) {
-          console.log(chalk.green(`✅ Mermaid validation passed (${validation.blockCount} diagrams found)`));
-        }
+      // Always pass to validator agent for final validation and fixes
+      if (options.verbose) {
+        console.log(chalk.blue('📋 First draft complete, passing to validator agent...'));
       }
 
-      if (validation.warnings.length > 0 && options.verbose) {
-        console.log(chalk.yellow('⚠️  Mermaid warnings:'));
-        validation.warnings.forEach(warning => console.log(chalk.yellow(`   ${warning}`)));
-      }
+      const finalResult = await validatorAgent(result, analysisPath, options);
 
       spinner.text = 'Saving results...';
 
@@ -145,12 +119,15 @@ program
       const stats = await fs.stat(options.output);
       console.log(`   Output size: ${(stats.size / 1024).toFixed(1)} KB`);
 
-      // Show validation results
-      const finalValidation = validateMermaidSyntax(await fs.readFile(options.output, 'utf8'));
-      if (finalValidation.isValid) {
-        console.log(chalk.green(`   Mermaid diagrams: ${finalValidation.blockCount} valid diagram(s) ✅`));
+      // Show final results
+      const finalContent = await fs.readFile(options.output, 'utf8');
+      const mermaidBlocks = finalContent.match(/```mermaid\n([\s\S]*?)\n```/g);
+      const blockCount = mermaidBlocks ? mermaidBlocks.length : 0;
+
+      if (blockCount > 0) {
+        console.log(chalk.green(`   Mermaid diagrams: ${blockCount} diagram(s) validated by agent ✅`));
       } else {
-        console.log(chalk.yellow(`   Mermaid diagrams: ${finalValidation.blockCount} diagram(s) with issues ⚠️`));
+        console.log(chalk.yellow(`   No Mermaid diagrams found in output ⚠️`));
       }
 
       if (isCloned) {
@@ -226,117 +203,160 @@ program
 
 // Helper functions
 function getDefaultPrompt() {
-  return `Analyze this codebase and generate a comprehensive Mermaid diagram that best represents the system architecture, data flow, or component relationships.
+  return `Analyze this codebase and generate a comprehensive, detailed Mermaid flowchart diagram that maps the complete system architecture and data flows.
 
-Please:
-1. Identify the main components, modules, or classes
-2. Determine the relationships and dependencies between them
-3. Choose the most appropriate Mermaid diagram type (flowchart, sequence, class, etc.)
-4. Generate clean, well-structured Mermaid syntax that follows proper Mermaid formatting rules
-5. Include a brief explanation of what the diagram represents
+REQUIREMENTS:
+1. **Complete Component Mapping**: Identify and include ALL relevant components:
+   - Controllers (API endpoints and their handlers)
+   - Models (database entities and data structures)
+   - Services/Interactors (business logic classes)
+   - Jobs (background processing)
+   - External API calls
+   - Database operations
+   - Analytics/tracking events
 
-IMPORTANT: Ensure the Mermaid syntax is valid and properly formatted. Use proper node IDs (alphanumeric, no spaces), escape special characters, and follow Mermaid syntax rules.
+2. **Detailed Flow Coverage**: Map ALL execution paths including:
+   - Success scenarios (happy path)
+   - Failure scenarios (error handling)
+   - Edge cases and validations
+   - Conditional logic branches
+   - Exception handling
 
-Focus on creating a diagram that would be most useful for understanding the codebase structure and flow.`;
+3. **Proper Mermaid Structure**: Use flowchart TD format with:
+   - Subgraphs to group related functionality
+   - Clear node IDs (alphanumeric only, no spaces or special characters)
+   - Proper arrow connections showing data flow
+   - Decision diamonds for conditional logic
+   - Different node shapes for different component types
+
+4. **Styling and Legend**: Include:
+   - CSS classes for different component types (controllers, models, jobs, etc.)
+   - Color coding to distinguish component types
+   - A comprehensive legend explaining the color scheme
+   - Professional styling with appropriate colors
+
+5. **Component Type Identification**: Clearly categorize each component as:
+   - 🔵 Endpoints (API routes)
+   - 🔷 Controllers (request handlers)
+   - 🟣 Organizers (high-level orchestration)
+   - 🟪 Interactors (business logic units)
+   - 🟠 Jobs (background processing)
+   - ⚫ External APIs (third-party services)
+   - 🟢 Models (data structures)
+   - 🟡 Analytics (tracking events)
+   - 🔴 Failures (error scenarios)
+
+IMPORTANT: Generate a production-ready diagram with complete coverage, proper styling, and a detailed legend. The diagram should be comprehensive enough for technical documentation and system understanding.`;
 }
 
-function validateMermaidSyntax(content) {
-  const errors = [];
-  const warnings = [];
+function shouldEnhancePrompt(prompt) {
+  const detailedKeywords = [
+    // Flow-related keywords
+    'flow', 'flows', 'component diagram', 'sequence diagram', 'architecture',
+    // Detail-requesting keywords
+    'detailed', 'comprehensive', 'complete', 'all', 'various', 'specific',
+    // Success/failure keywords
+    'success', 'failure', 'error', 'exception', 'handling',
+    // Domain-specific keywords (extensible)
+    'payment', 'stripe', 'subscription', 'billing', 'checkout',
+    'user', 'authentication', 'authorization', 'login',
+    'api', 'endpoint', 'controller', 'service', 'job',
+    // File/data level keywords
+    'file level', 'data level', 'database', 'model'
+  ];
 
-  // Extract Mermaid code blocks
-  const mermaidBlocks = content.match(/```mermaid\n([\s\S]*?)\n```/g);
+  const promptLower = prompt.toLowerCase();
+  return detailedKeywords.some(keyword => promptLower.includes(keyword));
+}
 
-  if (!mermaidBlocks || mermaidBlocks.length === 0) {
-    errors.push('No Mermaid diagrams found in the output');
-    return { isValid: false, errors, warnings };
+function enhanceDetailedDiagramPrompt(originalPrompt) {
+  return `${originalPrompt}
+
+**ENHANCED REQUIREMENTS FOR DETAILED DIAGRAMS:**
+
+Create a comprehensive Mermaid flowchart that includes:
+- ALL relevant components (controllers, services, jobs, models, external APIs)
+- Complete success AND failure paths with error handling
+- Professional styling with color-coded component types
+- Clear subgraph organization by functional area
+- Comprehensive legend explaining the diagram
+
+**CRITICAL OUTPUT REQUIREMENT:**
+You MUST output a complete Mermaid diagram using proper \`\`\`mermaid code blocks. Do NOT use any tools - just include the diagram directly in your response text.
+
+Example structure:
+\`\`\`mermaid
+flowchart TD
+    %% Your comprehensive diagram here
+    %% Include styling and legend
+\`\`\`
+
+Generate the complete diagram now.`;
+}
+
+async function validatorAgent(firstDraft, analysisPath, options) {
+  if (options.verbose) {
+    console.log(chalk.blue('🔍 Validator Agent: Analyzing first draft for issues...'));
   }
 
-  mermaidBlocks.forEach((block, index) => {
-    const mermaidCode = block.replace(/```mermaid\n/, '').replace(/\n```/, '');
-    const lines = mermaidCode.split('\n').filter(line => line.trim());
+  // Create the validator agent prompt
+  const validatorPrompt = `You are a specialized Mermaid Diagram Validator Agent. Your role is to:
 
-    if (lines.length === 0) {
-      errors.push(`Mermaid block ${index + 1} is empty`);
-      return;
+**ANALYZE** the provided Mermaid diagram markdown and **FIX** any syntax errors, rendering issues, or improvements needed.
+
+**YOUR TASKS:**
+1. **Validate Syntax**: Check for proper Mermaid syntax, correct arrow types, valid node IDs
+2. **Fix Errors**: Correct any parsing errors that would prevent rendering
+3. **Improve Quality**: Enhance styling, organization, and readability
+4. **Ensure Rendering**: Make sure the diagram will render perfectly in any Mermaid viewer
+
+**COMMON ISSUES TO FIX:**
+- Malformed arrows (e.g., "- ->" should be "-->")
+- Invalid node IDs with special characters
+- Unclosed subgraphs (missing "end" statements)
+- Incorrect diagram type declarations
+- Missing or broken styling/CSS classes
+- Unmatched brackets or parentheses
+
+**INPUT - FIRST DRAFT TO VALIDATE:**
+${firstDraft}
+
+**CRITICAL OUTPUT REQUIREMENTS:**
+- Return the COMPLETE corrected markdown (including any text outside the Mermaid blocks)
+- Ensure all Mermaid diagrams use proper \`\`\`mermaid code blocks
+- Fix all syntax errors while preserving the original intent and structure
+- Make the diagram production-ready and render-perfect
+
+**OUTPUT:** The validated and corrected markdown with perfect Mermaid diagrams.`;
+
+  try {
+    const spinner = ora('🔍 Validator Agent processing...').start();
+
+    // Run the validator agent with a fresh gemini-cli instance
+    const validatedResult = await runGeminiAnalysis(analysisPath, validatorPrompt, options.model, false);
+
+    spinner.succeed(chalk.green('✅ Validator Agent completed validation'));
+
+    if (options.verbose) {
+      console.log(chalk.green('🎯 Final validated diagram ready'));
     }
 
-    const firstLine = lines[0].trim();
+    return validatedResult;
 
-    // Check for valid diagram type
-    const validTypes = [
-      'graph', 'flowchart', 'sequenceDiagram', 'classDiagram',
-      'stateDiagram', 'erDiagram', 'journey', 'gantt', 'pie',
-      'gitgraph', 'mindmap', 'timeline'
-    ];
-
-    const hasValidType = validTypes.some(type => firstLine.startsWith(type));
-    if (!hasValidType) {
-      errors.push(`Mermaid block ${index + 1} doesn't start with a valid diagram type. Found: "${firstLine}"`);
+  } catch (error) {
+    if (options.verbose) {
+      console.log(chalk.red('❌ Validator Agent failed, returning first draft'));
+      console.error(chalk.red('Error:'), error.message);
     }
-
-    // Check for common syntax issues
-    lines.forEach((line, lineIndex) => {
-      const trimmedLine = line.trim();
-
-      // Skip empty lines and comments
-      if (!trimmedLine || trimmedLine.startsWith('%%')) return;
-
-      // Check for invalid characters in node IDs
-      if (trimmedLine.includes('-->') || trimmedLine.includes('->')) {
-        const parts = trimmedLine.split(/-->|->/).map(p => p.trim());
-        parts.forEach(part => {
-          // Extract node ID (before any labels)
-          const nodeId = part.split(/[\[\(]|-->/)[0].trim();
-          if (nodeId && !/^[a-zA-Z0-9_-]+$/.test(nodeId)) {
-            warnings.push(`Line ${lineIndex + 1} in block ${index + 1}: Node ID "${nodeId}" contains special characters that may cause issues`);
-          }
-        });
-      }
-
-      // Check for unmatched brackets
-      const openBrackets = (trimmedLine.match(/[\[\(]/g) || []).length;
-      const closeBrackets = (trimmedLine.match(/[\]\)]/g) || []).length;
-      if (openBrackets !== closeBrackets) {
-        warnings.push(`Line ${lineIndex + 1} in block ${index + 1}: Unmatched brackets detected`);
-      }
-    });
-  });
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-    blockCount: mermaidBlocks.length
-  };
+    return firstDraft; // Return first draft if validator fails
+  }
 }
 
-function fixCommonMermaidIssues(content) {
-  // Fix common Mermaid syntax issues
-  let fixed = content;
 
-  // Fix node IDs with spaces or special characters
-  fixed = fixed.replace(/```mermaid\n([\s\S]*?)\n```/g, (_, mermaidCode) => {
-    let fixedCode = mermaidCode;
 
-    // Replace problematic node IDs
-    fixedCode = fixedCode.replace(/([A-Za-z0-9_-]*[\s\-\/\\]+[A-Za-z0-9_-]*)/g, (match) => {
-      return match.replace(/[\s\-\/\\]+/g, '_');
-    });
 
-    // Ensure proper spacing around arrows
-    fixedCode = fixedCode.replace(/-->/g, ' --> ');
-    fixedCode = fixedCode.replace(/->/g, ' -> ');
 
-    // Remove extra spaces
-    fixedCode = fixedCode.replace(/\s+/g, ' ');
-    fixedCode = fixedCode.replace(/^ /gm, '');
 
-    return '```mermaid\n' + fixedCode + '\n```';
-  });
-
-  return fixed;
-}
 
 function isGitUrl(url) {
   const gitUrlPatterns = [
@@ -426,9 +446,15 @@ async function runGeminiAnalysis(analysisPath, prompt, model = 'gemini-pro', ver
     }, 10000); // Every 10 seconds
 
     geminiProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
+      const chunk = data.toString();
+      stdout += chunk;
       lastOutput = Date.now();
+
       if (verbose) {
+        // Stream the actual content from Gemini in real-time
+        process.stdout.write(chalk.cyan(chunk));
+      } else {
+        // Just show progress indicator
         console.log(chalk.gray(`📝 Received ${data.length} characters from Gemini`));
       }
     });
