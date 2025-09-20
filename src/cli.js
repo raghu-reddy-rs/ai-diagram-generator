@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Load environment variables from .env file
+require('dotenv').config();
+
 const { Command } = require('commander');
 const chalk = require('chalk');
 const ora = require('ora');
@@ -52,21 +55,28 @@ program
         spinner.text = 'Cloning repository...';
         analysisPath = await cloneRepository(targetPath, options.cloneDir, options.verbose);
         isCloned = true;
-        spinner.text = 'Repository cloned, starting analysis...';
+        spinner.succeed(chalk.green('✅ Repository cloned successfully'));
+        spinner.start('Preparing analysis...');
       } else {
         // Verify path exists
         if (!await fs.pathExists(targetPath)) {
           throw new Error(`Path does not exist: ${targetPath}`);
         }
+        spinner.text = 'Preparing analysis...';
       }
 
       // Get prompt
       const prompt = options.prompt || getDefaultPrompt();
 
       if (options.verbose) {
-        console.log(chalk.blue(`\n🔍 Analyzing: ${analysisPath}`));
-        console.log(chalk.gray(`Model: ${options.model}`));
-        console.log(chalk.gray(`Prompt: ${prompt.substring(0, 100)}...`));
+        spinner.stop();
+        console.log(chalk.blue(`\n🔍 Analysis Details:`));
+        console.log(chalk.gray(`   Path: ${analysisPath}`));
+        console.log(chalk.gray(`   Model: ${options.model}`));
+        console.log(chalk.gray(`   Prompt: ${prompt.substring(0, 100)}...`));
+        console.log(chalk.gray(`   Output: ${options.output}`));
+        console.log('');
+        spinner.start('Starting Gemini analysis...');
       }
 
       spinner.text = 'Running Gemini analysis...';
@@ -74,10 +84,48 @@ program
       // Run Gemini CLI directly on the path
       const result = await runGeminiAnalysis(analysisPath, prompt, options.model, options.verbose);
 
+      spinner.text = 'Validating Mermaid diagrams...';
+
+      // Validate and fix Mermaid syntax
+      const validation = validateMermaidSyntax(result);
+      let finalResult = result;
+
+      if (!validation.isValid) {
+        if (options.verbose) {
+          console.log(chalk.yellow('⚠️  Mermaid validation issues found:'));
+          validation.errors.forEach(error => console.log(chalk.red(`   ❌ ${error}`)));
+          validation.warnings.forEach(warning => console.log(chalk.yellow(`   ⚠️  ${warning}`)));
+        }
+
+        spinner.text = 'Attempting to fix Mermaid syntax...';
+        finalResult = fixCommonMermaidIssues(result);
+
+        // Re-validate after fixes
+        const revalidation = validateMermaidSyntax(finalResult);
+        if (revalidation.isValid) {
+          if (options.verbose) {
+            console.log(chalk.green('✅ Mermaid syntax issues fixed automatically'));
+          }
+        } else {
+          if (options.verbose) {
+            console.log(chalk.yellow('⚠️  Some Mermaid issues remain after auto-fix'));
+          }
+        }
+      } else {
+        if (options.verbose) {
+          console.log(chalk.green(`✅ Mermaid validation passed (${validation.blockCount} diagrams found)`));
+        }
+      }
+
+      if (validation.warnings.length > 0 && options.verbose) {
+        console.log(chalk.yellow('⚠️  Mermaid warnings:'));
+        validation.warnings.forEach(warning => console.log(chalk.yellow(`   ${warning}`)));
+      }
+
       spinner.text = 'Saving results...';
 
       // Save output
-      await fs.writeFile(options.output, result);
+      await fs.writeFile(options.output, finalResult);
 
       // Cleanup cloned repo if needed
       if (isCloned && !options.keepClone) {
@@ -89,13 +137,28 @@ program
 
       // Show summary
       console.log(chalk.blue('\n📊 Analysis Summary:'));
-      console.log(`Analysis path: ${analysisPath}`);
-      console.log(`Output file: ${options.output}`);
-      console.log(`Model used: ${options.model}`);
-      if (isCloned) {
-        console.log(`Repository: ${targetPath}`);
-        console.log(`Cleanup: ${options.keepClone ? 'Kept' : 'Removed'}`);
+      console.log(`   Analysis path: ${analysisPath}`);
+      console.log(`   Output file: ${options.output}`);
+      console.log(`   Model used: ${options.model}`);
+
+      // Show file size
+      const stats = await fs.stat(options.output);
+      console.log(`   Output size: ${(stats.size / 1024).toFixed(1)} KB`);
+
+      // Show validation results
+      const finalValidation = validateMermaidSyntax(await fs.readFile(options.output, 'utf8'));
+      if (finalValidation.isValid) {
+        console.log(chalk.green(`   Mermaid diagrams: ${finalValidation.blockCount} valid diagram(s) ✅`));
+      } else {
+        console.log(chalk.yellow(`   Mermaid diagrams: ${finalValidation.blockCount} diagram(s) with issues ⚠️`));
       }
+
+      if (isCloned) {
+        console.log(`   Repository: ${targetPath}`);
+        console.log(`   Cleanup: ${options.keepClone ? 'Kept' : 'Removed'}`);
+      }
+
+      console.log(chalk.green(`\n🎉 Analysis complete! View results: ${options.output}`));
 
     } catch (error) {
       spinner.fail(chalk.red('❌ Analysis failed'));
@@ -169,10 +232,110 @@ Please:
 1. Identify the main components, modules, or classes
 2. Determine the relationships and dependencies between them
 3. Choose the most appropriate Mermaid diagram type (flowchart, sequence, class, etc.)
-4. Generate clean, well-structured Mermaid syntax
+4. Generate clean, well-structured Mermaid syntax that follows proper Mermaid formatting rules
 5. Include a brief explanation of what the diagram represents
 
+IMPORTANT: Ensure the Mermaid syntax is valid and properly formatted. Use proper node IDs (alphanumeric, no spaces), escape special characters, and follow Mermaid syntax rules.
+
 Focus on creating a diagram that would be most useful for understanding the codebase structure and flow.`;
+}
+
+function validateMermaidSyntax(content) {
+  const errors = [];
+  const warnings = [];
+
+  // Extract Mermaid code blocks
+  const mermaidBlocks = content.match(/```mermaid\n([\s\S]*?)\n```/g);
+
+  if (!mermaidBlocks || mermaidBlocks.length === 0) {
+    errors.push('No Mermaid diagrams found in the output');
+    return { isValid: false, errors, warnings };
+  }
+
+  mermaidBlocks.forEach((block, index) => {
+    const mermaidCode = block.replace(/```mermaid\n/, '').replace(/\n```/, '');
+    const lines = mermaidCode.split('\n').filter(line => line.trim());
+
+    if (lines.length === 0) {
+      errors.push(`Mermaid block ${index + 1} is empty`);
+      return;
+    }
+
+    const firstLine = lines[0].trim();
+
+    // Check for valid diagram type
+    const validTypes = [
+      'graph', 'flowchart', 'sequenceDiagram', 'classDiagram',
+      'stateDiagram', 'erDiagram', 'journey', 'gantt', 'pie',
+      'gitgraph', 'mindmap', 'timeline'
+    ];
+
+    const hasValidType = validTypes.some(type => firstLine.startsWith(type));
+    if (!hasValidType) {
+      errors.push(`Mermaid block ${index + 1} doesn't start with a valid diagram type. Found: "${firstLine}"`);
+    }
+
+    // Check for common syntax issues
+    lines.forEach((line, lineIndex) => {
+      const trimmedLine = line.trim();
+
+      // Skip empty lines and comments
+      if (!trimmedLine || trimmedLine.startsWith('%%')) return;
+
+      // Check for invalid characters in node IDs
+      if (trimmedLine.includes('-->') || trimmedLine.includes('->')) {
+        const parts = trimmedLine.split(/-->|->/).map(p => p.trim());
+        parts.forEach(part => {
+          // Extract node ID (before any labels)
+          const nodeId = part.split(/[\[\(]|-->/)[0].trim();
+          if (nodeId && !/^[a-zA-Z0-9_-]+$/.test(nodeId)) {
+            warnings.push(`Line ${lineIndex + 1} in block ${index + 1}: Node ID "${nodeId}" contains special characters that may cause issues`);
+          }
+        });
+      }
+
+      // Check for unmatched brackets
+      const openBrackets = (trimmedLine.match(/[\[\(]/g) || []).length;
+      const closeBrackets = (trimmedLine.match(/[\]\)]/g) || []).length;
+      if (openBrackets !== closeBrackets) {
+        warnings.push(`Line ${lineIndex + 1} in block ${index + 1}: Unmatched brackets detected`);
+      }
+    });
+  });
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    blockCount: mermaidBlocks.length
+  };
+}
+
+function fixCommonMermaidIssues(content) {
+  // Fix common Mermaid syntax issues
+  let fixed = content;
+
+  // Fix node IDs with spaces or special characters
+  fixed = fixed.replace(/```mermaid\n([\s\S]*?)\n```/g, (_, mermaidCode) => {
+    let fixedCode = mermaidCode;
+
+    // Replace problematic node IDs
+    fixedCode = fixedCode.replace(/([A-Za-z0-9_-]*[\s\-\/\\]+[A-Za-z0-9_-]*)/g, (match) => {
+      return match.replace(/[\s\-\/\\]+/g, '_');
+    });
+
+    // Ensure proper spacing around arrows
+    fixedCode = fixedCode.replace(/-->/g, ' --> ');
+    fixedCode = fixedCode.replace(/->/g, ' -> ');
+
+    // Remove extra spaces
+    fixedCode = fixedCode.replace(/\s+/g, ' ');
+    fixedCode = fixedCode.replace(/^ /gm, '');
+
+    return '```mermaid\n' + fixedCode + '\n```';
+  });
+
+  return fixed;
 }
 
 function isGitUrl(url) {
@@ -252,17 +415,37 @@ async function runGeminiAnalysis(analysisPath, prompt, model = 'gemini-pro', ver
 
     let stdout = '';
     let stderr = '';
+    let lastOutput = Date.now();
+
+    // Provide periodic feedback during long operations
+    const feedbackInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - lastOutput) / 1000);
+      if (verbose) {
+        console.log(chalk.gray(`⏳ Still analyzing... (${elapsed}s elapsed)`));
+      }
+    }, 10000); // Every 10 seconds
 
     geminiProcess.stdout.on('data', (data) => {
       stdout += data.toString();
+      lastOutput = Date.now();
+      if (verbose) {
+        console.log(chalk.gray(`📝 Received ${data.length} characters from Gemini`));
+      }
     });
 
     geminiProcess.stderr.on('data', (data) => {
       stderr += data.toString();
+      if (verbose) {
+        console.log(chalk.yellow(`⚠️  Gemini stderr: ${data.toString().trim()}`));
+      }
     });
 
     geminiProcess.on('close', (code) => {
+      clearInterval(feedbackInterval);
       if (code === 0) {
+        if (verbose) {
+          console.log(chalk.green(`✅ Gemini analysis completed (${stdout.length} characters)`));
+        }
         resolve(stdout.trim());
       } else {
         reject(new Error(`Gemini CLI failed with exit code ${code}: ${stderr}`));
@@ -270,6 +453,7 @@ async function runGeminiAnalysis(analysisPath, prompt, model = 'gemini-pro', ver
     });
 
     geminiProcess.on('error', (error) => {
+      clearInterval(feedbackInterval);
       reject(new Error(`Failed to run Gemini CLI: ${error.message}`));
     });
   });
