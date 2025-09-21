@@ -434,6 +434,27 @@ async function validateMermaidSyntax(mermaidContent) {
       if (openParens !== closeParens) {
         errors.push(`Line ${i + 1}: Unmatched parentheses`);
       }
+
+      // Check for invalid node syntax combinations
+      if (line.includes('([') && line.includes('])')) {
+        errors.push(`Line ${i + 1}: Invalid node syntax - cannot combine parentheses and brackets like ([...]). Use either (...) or [...] but not both.`);
+      }
+
+      // Check for parentheses in node text that conflicts with node shape syntax
+      const nodeWithParensInText = /\w+\(".*\(.*\).*"\):::/g;
+      if (nodeWithParensInText.test(line)) {
+        errors.push(`Line ${i + 1}: Invalid node syntax - parentheses in node text conflict with rounded rectangle syntax. Use square brackets instead: NodeID["text with (parentheses)"]`);
+      }
+
+      // Check for other invalid node syntax patterns
+      if (line.includes(']{') || line.includes('}[')) {
+        errors.push(`Line ${i + 1}: Invalid node syntax - malformed bracket/brace combination`);
+      }
+
+      // Check for invalid arrow syntax
+      if (line.includes('-->-') || line.includes('--->>')) {
+        errors.push(`Line ${i + 1}: Invalid arrow syntax`);
+      }
     }
 
     // If no errors found, consider it valid
@@ -516,12 +537,15 @@ ${validationSummary}
 4. **Preserve Content**: Keep all explanatory text, headings, and structure that help understanding
 
 **COMMON ISSUES TO FIX:**
+- **Invalid node syntax combinations**: NodeID(["Text"]) should be NodeID["Text"] or NodeID("Text") - never combine parentheses and brackets
+- **Parentheses in node text**: NodeID("text with (parentheses)") causes parser conflicts - use NodeID["text with (parentheses)"] instead
 - **Node syntax with spaces/special chars**: A1(POST /api/payments) should be A1["POST /api/payments"]
 - **Malformed node definitions**: NodeID(["Text should be NodeID["Text"]
-- **Invalid arrows**: Remove semicolons after arrows
+- **Invalid arrows**: Remove semicolons after arrows, fix malformed arrows like -->- or --->>
 - **Inline class syntax**: Replace ::: with class statements
 - **Unquoted labels**: Special characters need proper quoting
 - **Missing or broken styling definitions**
+- **Bracket/brace combinations**: Fix invalid patterns like ]{, }[, or other malformed combinations
 
 **INPUT - FIRST DRAFT TO VALIDATE:**
 ${firstDraft}
