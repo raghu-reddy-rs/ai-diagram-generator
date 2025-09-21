@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const inquirer = require('inquirer');
+const mermaid = require('mermaid');
 
 const { version } = require('../package.json');
 
@@ -148,6 +149,9 @@ program
 
       console.log(chalk.green(`\n🎉 Analysis complete! View results: ${options.output}`));
 
+      // Ask for follow-up improvements
+      await askForFollowUp(options.output, finalContent, options);
+
     } catch (error) {
       spinner.fail(chalk.red('❌ Analysis failed'));
       console.error(chalk.red('Error:'), error.message);
@@ -218,7 +222,7 @@ function getDefaultPrompt() {
 
 REQUIREMENTS:
 1. **Complete Component Mapping**: Identify and include ALL relevant components:
-   - Controllers (API endpoints and their handlers)
+   - Controllers (API endpoints (both inbound and outbound) and their handlers)
    - Models (database entities and data structures)
    - Services/Interactors (business logic classes)
    - Jobs (background processing)
@@ -291,7 +295,7 @@ Create comprehensive architectural documentation with Mermaid diagrams that incl
 - **Complete Flows**: Both success AND failure paths with error handling
 - **Professional Styling**: Color-coded component types with clear legends
 - **Organized Structure**: Use subgraphs to group related functionality
-- **Engineer-Friendly**: Write as documentation that helps new engineers understand the architecture
+- **Engineer-Friendly**: Write as documentation that helps a senior software engineer understand the architecture
 
 **CRITICAL OUTPUT REQUIREMENTS:**
 - Start with a clear heading and system overview
@@ -413,13 +417,119 @@ async function confirmEnhancedPrompt(enhancedPrompt, originalPrompt, options) {
   };
 }
 
+// Extract Mermaid code blocks from markdown content
+function extractMermaidBlocks(content) {
+  const mermaidBlocks = [];
+  const regex = /```mermaid\n([\s\S]*?)\n```/g;
+  let match;
+  let index = 1;
+
+  while ((match = regex.exec(content)) !== null) {
+    const mermaidContent = match[1].trim();
+    const type = detectMermaidType(mermaidContent);
+
+    mermaidBlocks.push({
+      index,
+      type,
+      content: mermaidContent,
+      fullMatch: match[0]
+    });
+    index++;
+  }
+
+  return mermaidBlocks;
+}
+
+// Detect the type of Mermaid diagram
+function detectMermaidType(content) {
+  const firstLine = content.split('\n')[0].trim().toLowerCase();
+
+  if (firstLine.includes('sequencediagram')) return 'sequence';
+  if (firstLine.includes('flowchart') || firstLine.includes('graph')) return 'flowchart';
+  if (firstLine.includes('classDiagram')) return 'class';
+  if (firstLine.includes('stateDiagram')) return 'state';
+  if (firstLine.includes('erDiagram')) return 'er';
+  if (firstLine.includes('gantt')) return 'gantt';
+  if (firstLine.includes('pie')) return 'pie';
+  if (firstLine.includes('journey')) return 'journey';
+
+  return 'unknown';
+}
+
+// Validate Mermaid syntax using the actual Mermaid parser
+async function validateMermaidSyntax(mermaidContent) {
+  try {
+    // Initialize mermaid with basic config
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'default',
+      securityLevel: 'loose'
+    });
+
+    // Try to parse the mermaid content
+    await mermaid.parse(mermaidContent);
+
+    return {
+      isValid: true,
+      errors: []
+    };
+  } catch (error) {
+    return {
+      isValid: false,
+      errors: [error.message || 'Unknown syntax error']
+    };
+  }
+}
+
 async function validatorAgent(firstDraft, analysisPath, options) {
-  if (options.verbose) {
-    console.log(chalk.blue('🔍 Validator Agent: Analyzing first draft for issues...'));
+  console.log(chalk.blue('🔍 Validator Agent: Starting validation process...'));
+
+  // Extract and analyze Mermaid diagrams first
+  console.log(chalk.blue('🔍 Validator: Extracting Mermaid diagrams from first draft...'));
+  const mermaidBlocks = extractMermaidBlocks(firstDraft);
+  console.log(chalk.blue(`🔍 Validator: Found ${mermaidBlocks.length} Mermaid diagram(s) to analyze`));
+
+  // Validate each diagram
+  const validationResults = [];
+  for (const block of mermaidBlocks) {
+    console.log(chalk.blue(`🔍 Validator: Analyzing diagram ${block.index} (${block.type})...`));
+    const result = await validateMermaidSyntax(block.content);
+    validationResults.push({
+      ...block,
+      isValid: result.isValid,
+      errors: result.errors
+    });
+
+    if (result.isValid) {
+      console.log(chalk.green(`✅ Validator: Diagram ${block.index} syntax is valid`));
+    } else {
+      console.log(chalk.yellow(`⚠️ Validator: Diagram ${block.index} has syntax issues:`));
+      result.errors.forEach(error => {
+        console.log(chalk.yellow(`   - ${error}`));
+      });
+    }
+  }
+
+  // Create validation summary
+  const validDiagrams = validationResults.filter(r => r.isValid).length;
+  const invalidDiagrams = validationResults.filter(r => !r.isValid).length;
+
+  console.log(chalk.blue('🔍 Validator: Validation Summary:'));
+  console.log(chalk.green(`   ✅ Valid diagrams: ${validDiagrams}`));
+  if (invalidDiagrams > 0) {
+    console.log(chalk.yellow(`   ⚠️ Diagrams needing fixes: ${invalidDiagrams}`));
   }
 
   // Create the validator agent prompt
+  const validationSummary = validationResults.map(r =>
+    `- Diagram ${r.index} (${r.type}): ${r.isValid ? '✅ Valid' : '❌ Issues: ' + r.errors.join(', ')}`
+  ).join('\n');
+
+  console.log(chalk.blue('🔍 Validator: Preparing validation prompt for AI agent...'));
   const validatorPrompt = `You are a specialized Mermaid Diagram Validator Agent. Your role is to produce clean, documentation-ready markdown.
+
+**VALIDATION ANALYSIS:**
+${validationSummary}
 
 **YOUR TASKS:**
 1. **Validate Syntax**: Fix any Mermaid syntax errors that would prevent rendering
@@ -449,10 +559,34 @@ ${firstDraft}
 **OUTPUT:** Clean, documentation-ready markdown that serves as architectural overview for engineers.`;
 
   try {
-    const spinner = ora('🔍 Validator Agent processing...').start();
+    const spinner = ora('🔍 Validator Agent processing with AI...').start();
 
+    console.log(chalk.blue('🔍 Validator: Sending validation request to AI agent...'));
     // Run the validator agent with just the prompt (no file analysis needed)
-    const validatedResult = await runGeminiPrompt(validatorPrompt, 'gemini-2.5-flash', false);
+    const validatedResult = await runGeminiPrompt(validatorPrompt, 'gemini-2.5-pro', false);
+
+    console.log(chalk.blue('🔍 Validator: Received response from AI agent, re-validating...'));
+
+    // Re-validate the corrected content
+    const correctedBlocks = extractMermaidBlocks(validatedResult);
+    console.log(chalk.blue(`🔍 Validator: Re-checking ${correctedBlocks.length} diagram(s) in corrected output...`));
+
+    let allFixed = true;
+    for (const block of correctedBlocks) {
+      const result = await validateMermaidSyntax(block.content);
+      if (!result.isValid) {
+        console.log(chalk.yellow(`⚠️ Validator: Diagram ${block.index} still has issues: ${result.errors.join(', ')}`));
+        allFixed = false;
+      } else {
+        console.log(chalk.green(`✅ Validator: Diagram ${block.index} is now valid`));
+      }
+    }
+
+    if (allFixed) {
+      console.log(chalk.green('🎯 Validator: All diagrams successfully validated and corrected'));
+    } else {
+      console.log(chalk.yellow('⚠️ Validator: Some diagrams still have minor issues, but proceeding with best effort'));
+    }
 
     spinner.succeed(chalk.green('✅ Validator Agent completed validation'));
 
@@ -463,9 +597,10 @@ ${firstDraft}
     return validatedResult;
 
   } catch (error) {
+    console.log(chalk.red('❌ Validator Agent encountered an error during processing'));
+    console.error(chalk.red('Validator Error Details:'), error.message);
     if (options.verbose) {
       console.log(chalk.red('❌ Validator Agent failed, returning first draft'));
-      console.error(chalk.red('Error:'), error.message);
     }
     return firstDraft; // Return first draft if validator fails
   }
@@ -530,6 +665,99 @@ async function cloneRepository(repoUrl, baseDir, verbose = false, branch = null)
   });
 }
 
+// Ask for follow-up improvements to the generated documentation
+async function askForFollowUp(outputFile, currentContent, options) {
+  try {
+    const { wantFollowUp } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'wantFollowUp',
+        message: 'Would you like to add anything else or improve the documentation?',
+        default: false
+      }
+    ]);
+
+    if (!wantFollowUp) {
+      return;
+    }
+
+    // Get follow-up request from user
+    const { followUpPrompt } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'followUpPrompt',
+        message: 'What would you like to add or improve?',
+        validate: (input) => {
+          if (!input.trim()) {
+            return 'Please enter a follow-up request.';
+          }
+          return true;
+        }
+      }
+    ]);
+
+    console.log(chalk.blue('\n🔄 Processing follow-up request...'));
+
+    // Create context-aware follow-up prompt
+    const contextPrompt = `You are enhancing existing architectural documentation. Here is the current documentation:
+
+**CURRENT DOCUMENTATION:**
+${currentContent}
+
+**USER'S FOLLOW-UP REQUEST:**
+${followUpPrompt}
+
+**YOUR TASK:**
+Enhance the existing documentation by adding the requested improvements while preserving all existing content. You should:
+1. **Keep ALL existing content** - Do not remove or replace any existing sections
+2. **Add new content** - Address the specific follow-up request by adding new sections, diagrams, or details
+3. **Maintain consistency** - Use the same style, format, and tone as the existing documentation
+4. **Enhance, don't replace** - Build upon what's already there
+
+**IMPORTANT:**
+- Return the COMPLETE enhanced documentation (existing content + new additions)
+- Keep all existing Mermaid diagrams and add new ones if requested
+- Preserve the existing structure and add new sections as needed
+- Ensure all Mermaid syntax is correct
+- If the current documentation is incomplete or minimal, create a comprehensive version that addresses the follow-up request
+
+Provide the enhanced documentation now:`;
+
+    const spinner = ora('🔄 Enhancing documentation...').start();
+
+    try {
+      // Use gemini-cli to process the follow-up with full context
+      const enhancedContent = await runGeminiPrompt(contextPrompt, options.model, false);
+
+      // Validate the enhanced content
+      const finalContent = await validatorAgent(enhancedContent, '', options);
+
+      // Save the improved version
+      await fs.writeFile(outputFile, finalContent);
+
+      spinner.succeed(chalk.green('✅ Documentation enhanced successfully!'));
+
+      console.log(chalk.green(`\n🎉 Enhanced documentation saved to: ${outputFile}`));
+
+      // Offer another round of improvements
+      await askForFollowUp(outputFile, finalContent, options);
+
+    } catch (error) {
+      spinner.fail(chalk.red('❌ Follow-up enhancement failed'));
+      console.error(chalk.red('Error:'), error.message);
+      if (options.verbose) {
+        console.error(error.stack);
+      }
+    }
+
+  } catch (error) {
+    // User cancelled or other error - just return gracefully
+    if (error.name !== 'ExitPromptError') {
+      console.error(chalk.red('Follow-up error:'), error.message);
+    }
+  }
+}
+
 // Function to run gemini with just a prompt (for validator agent)
 async function runGeminiPrompt(prompt, model = 'gemini-2.5-pro', verbose = false) {
   return new Promise((resolve, reject) => {
@@ -589,7 +817,14 @@ async function runGeminiAnalysis(analysisPath, prompt, model = 'gemini-2.5-pro',
     }
 
     // Change to the analysis directory and run gemini with the prompt
-    args.push(prompt);
+    // Add explicit instruction to prevent write_file tool usage
+    const modifiedPrompt = `${prompt}
+
+CRITICAL INSTRUCTION: Please provide your complete analysis as markdown text directly in your response. Do NOT attempt to use any write_file, save_file, create_file, or similar file-writing tools. These tools are not available in this environment. Just return the complete markdown content with Mermaid diagrams directly in your response text.
+
+Your response should be complete, well-formatted markdown documentation that can be saved to a file.`;
+
+    args.push(modifiedPrompt);
 
     if (verbose) {
       console.log(chalk.gray(`Running: gemini ${args.join(' ')}`));
