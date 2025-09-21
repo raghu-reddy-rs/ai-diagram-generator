@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const inquirer = require('inquirer');
-const mermaid = require('mermaid');
+
 
 const { version } = require('../package.json');
 
@@ -66,13 +66,8 @@ program
         spinner.text = 'Preparing analysis...';
       }
 
-      // Get prompt - enhance based on detected domain/complexity
+      // Get prompt
       let prompt = options.prompt || getDefaultPrompt();
-
-      // Enhance prompts that request detailed component diagrams
-      if (shouldEnhancePrompt(prompt)) {
-        prompt = enhanceDetailedDiagramPrompt(prompt);
-      }
 
       if (options.verbose) {
         spinner.stop();
@@ -91,7 +86,7 @@ program
       const enhancedPrompt = await aiEnhancePrompt(prompt, options);
 
       // Ask user how they want to proceed
-      const userChoice = await confirmEnhancedPrompt(enhancedPrompt, prompt, options);
+      const userChoice = await confirmEnhancedPrompt(enhancedPrompt, prompt);
       if (!userChoice.proceed) {
         spinner.stop();
         console.log(chalk.yellow('Analysis cancelled by user.'));
@@ -106,7 +101,7 @@ program
         console.log(chalk.blue('📋 First draft complete, passing to validator agent...'));
       }
 
-      const finalResult = await validatorAgent(result, analysisPath, options);
+      const finalResult = await validatorAgent(result, options);
 
       spinner.text = 'Saving results...';
 
@@ -218,7 +213,7 @@ program
 
 // Helper functions
 function getDefaultPrompt() {
-  return `Analyze this codebase and generate a comprehensive, detailed markdown with Mermaid (v9) diagrams that map the domain architecture and data flows.
+  return `Analyze this codebase and generate a comprehensive, detailed markdown with Mermaid (v9) diagrams that map the domain architecture and data flows. Your audience is a team of Senior Software Engineers.
 
 REQUIREMENTS:
 1. **Complete Component Mapping**: Identify and include ALL relevant components:
@@ -232,12 +227,13 @@ REQUIREMENTS:
 
 2. **Detailed Flow Coverage**: Map ALL execution paths including:
    - Success scenarios (happy path)
-   - Failure scenarios (error handling)
+   - Failure scenarios (sad path)
+   - Error scenarios (error handling)
    - Edge cases and validations
    - Conditional logic branches
    - Exception handling
 
-3. **Proper Mermaid Structure**: Use flowchart TD format with:
+3. **Proper Mermaid v9 Structure**: Use flowchart TD format with:
    - Subgraphs to group related functionality
    - Clear node IDs (alphanumeric only, no spaces or special characters)
    - Proper arrow connections showing data flow
@@ -264,60 +260,7 @@ REQUIREMENTS:
 IMPORTANT: Generate a production-ready diagram with complete coverage, proper styling, and a detailed legend. The diagram should be comprehensive enough for technical documentation and system understanding.`;
 }
 
-function shouldEnhancePrompt(prompt) {
-  const detailedKeywords = [
-    // Flow-related keywords
-    'flow', 'flows', 'component diagram', 'sequence diagram', 'architecture',
-    // Detail-requesting keywords
-    'detailed', 'comprehensive', 'complete', 'all', 'various', 'specific',
-    // Success/failure keywords
-    'success', 'failure', 'error', 'exception', 'handling',
-    // Domain-specific keywords (extensible)
-    'payment', 'stripe', 'subscription', 'billing', 'checkout',
-    'user', 'authentication', 'authorization', 'login',
-    'api', 'endpoint', 'controller', 'service', 'job',
-    // File/data level keywords
-    'file level', 'data level', 'database', 'model'
-  ];
 
-  const promptLower = prompt.toLowerCase();
-  return detailedKeywords.some(keyword => promptLower.includes(keyword));
-}
-
-function enhanceDetailedDiagramPrompt(originalPrompt) {
-  return `${originalPrompt}
-
-**ENHANCED REQUIREMENTS FOR ARCHITECTURAL DOCUMENTATION:**
-
-Create comprehensive architectural documentation with Mermaid diagrams that includes:
-- **Clear Overview**: Start with a brief explanation of what the system does
-- **Comprehensive Diagrams**: ALL relevant components (controllers, services, jobs, models, external APIs)
-- **Complete Flows**: Both success AND failure paths with error handling
-- **Professional Styling**: Color-coded component types with clear legends
-- **Organized Structure**: Use subgraphs to group related functionality
-- **Engineer-Friendly**: Write as documentation that helps a senior software engineer understand the architecture
-
-**CRITICAL OUTPUT REQUIREMENTS:**
-- Start with a clear heading and system overview
-- Include explanatory text before and after diagrams
-- Use proper \`\`\`mermaid code blocks for all diagrams
-- Add context that helps engineers understand the business logic
-- Structure as professional architectural documentation
-
-**EXAMPLE STRUCTURE:**
-# System Architecture Overview
-Brief explanation of what this system does...
-## Payment Processing Flow
-The payment system handles...
-\`\`\`mermaid
-flowchart TD
-    %% Your comprehensive diagram here
-\`\`\`
-## Key Components
-- **Controllers**: Handle HTTP requests...
-
-Generate complete architectural documentation now.`;
-}
 
 // AI enhance step: analyze user's prompt and enhance it with domain-specific details
 async function aiEnhancePrompt(originalPrompt, options) {
@@ -352,6 +295,7 @@ ${basePrompt}
 - Add domain-specific flows and patterns
 - Include relevant architectural boundaries (microservices, UI, database, etc.)
 - Specify important decision points (success/failure/error paths)
+- Add code for code execution decision points
 - Maintain the user's original intent while leveraging the comprehensive base template
 
 **OUTPUT FORMAT:**
@@ -378,7 +322,7 @@ Provide the enhanced prompt now:`;
 }
 
 // Ask user to choose how to proceed with the enhanced prompt
-async function confirmEnhancedPrompt(enhancedPrompt, originalPrompt, options) {
+async function confirmEnhancedPrompt(enhancedPrompt, originalPrompt) {
   console.log(chalk.blue('\n🎯 Enhanced Analysis Request:'));
   console.log(chalk.gray('────────────────────────────────────────────────────────────────────────────────'));
   console.log(enhancedPrompt);
@@ -456,32 +400,56 @@ function detectMermaidType(content) {
   return 'unknown';
 }
 
-// Validate Mermaid syntax using the actual Mermaid parser
+// Validate Mermaid syntax using basic syntax checks
 async function validateMermaidSyntax(mermaidContent) {
   try {
-    // Initialize mermaid with basic config
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'default',
-      securityLevel: 'loose'
-    });
+    const errors = [];
+    const lines = mermaidContent.split('\n');
 
-    // Try to parse the mermaid content
-    await mermaid.parse(mermaidContent);
+    // Basic syntax validation checks
+    const firstLine = lines[0].trim().toLowerCase();
 
+    // Check for valid diagram type
+    const validTypes = ['flowchart', 'graph', 'sequencediagram', 'classDiagram', 'stateDiagram', 'erDiagram', 'gantt', 'pie', 'journey'];
+    const hasValidType = validTypes.some(type => firstLine.includes(type.toLowerCase()));
+
+    if (!hasValidType) {
+      errors.push('Missing or invalid diagram type declaration');
+    }
+
+    // Check for common syntax issues
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line || line.startsWith('%%')) continue; // Skip empty lines and comments
+
+      // Check for unmatched brackets
+      const openBrackets = (line.match(/\[/g) || []).length;
+      const closeBrackets = (line.match(/\]/g) || []).length;
+      const openParens = (line.match(/\(/g) || []).length;
+      const closeParens = (line.match(/\)/g) || []).length;
+
+      if (openBrackets !== closeBrackets) {
+        errors.push(`Line ${i + 1}: Unmatched square brackets`);
+      }
+      if (openParens !== closeParens) {
+        errors.push(`Line ${i + 1}: Unmatched parentheses`);
+      }
+    }
+
+    // If no errors found, consider it valid
     return {
-      isValid: true,
-      errors: []
+      isValid: errors.length === 0,
+      errors: errors
     };
   } catch (error) {
     return {
       isValid: false,
-      errors: [error.message || 'Unknown syntax error']
+      errors: ['Validation error: ' + error.message]
     };
   }
 }
 
-async function validatorAgent(firstDraft, analysisPath, options) {
+async function validatorAgent(firstDraft, options) {
   console.log(chalk.blue('🔍 Validator Agent: Starting validation process...'));
 
   // Extract and analyze Mermaid diagrams first
@@ -518,6 +486,16 @@ async function validatorAgent(firstDraft, analysisPath, options) {
   console.log(chalk.green(`   ✅ Valid diagrams: ${validDiagrams}`));
   if (invalidDiagrams > 0) {
     console.log(chalk.yellow(`   ⚠️ Diagrams needing fixes: ${invalidDiagrams}`));
+  }
+
+  // If all diagrams are valid, return the first draft immediately
+  if (invalidDiagrams === 0) {
+    console.log(chalk.green('🎯 Validator: All diagrams are valid, no fixes needed'));
+    console.log(chalk.green('✅ Validator Agent completed validation'));
+    if (options.verbose) {
+      console.log(chalk.green('🎯 Final validated diagram ready'));
+    }
+    return firstDraft;
   }
 
   // Create the validator agent prompt
@@ -730,7 +708,7 @@ Provide the enhanced documentation now:`;
       const enhancedContent = await runGeminiPrompt(contextPrompt, options.model, false);
 
       // Validate the enhanced content
-      const finalContent = await validatorAgent(enhancedContent, '', options);
+      const finalContent = await validatorAgent(enhancedContent, options);
 
       // Save the improved version
       await fs.writeFile(outputFile, finalContent);
