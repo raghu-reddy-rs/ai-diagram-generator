@@ -39,7 +39,7 @@ flowchart TD
         I --> J
 
         J --> K[Get/Enhance Prompt]
-        K --> L[Run Gemini Analysis]
+        K --> L[Run Ai Analysis]
         L --> M[Validator Agent]
         M --> N[Save Output to File]
         N --> O{Repo was Cloned?}

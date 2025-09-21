@@ -27,7 +27,7 @@ program
   .option('-p, --prompt <prompt>', 'Custom analysis prompt')
   .option('-o, --output <file>', 'Output file path', 'analysis-output.md')
   .option('--api-key <key>', 'Gemini API key (overrides environment)')
-  .option('--model <model>', 'Gemini model to use', 'gemini-pro')
+  .option('--model <model>', 'Gemini model to use', 'gemini-2.5-pro')
   .option('--clone-dir <dir>', 'Directory to clone repos into', './temp-repos')
   .option('--keep-clone', 'Keep cloned repository after analysis')
   .option('--verbose', 'Enable verbose logging')
@@ -81,13 +81,24 @@ program
         console.log(chalk.gray(`   Prompt: ${prompt.substring(0, 100)}...`));
         console.log(chalk.gray(`   Output: ${options.output}`));
         console.log('');
-        spinner.start('Starting Gemini analysis...');
+        spinner.start('Starting AI analysis...');
       }
 
-      spinner.text = 'Running Gemini analysis...';
+      spinner.text = 'Running AI analysis...';
 
-      // Run Gemini CLI directly on the path
-      const result = await runGeminiAnalysis(analysisPath, prompt, options.model, options.verbose);
+      // AI enhance step: analyze and enhance the user's prompt
+      const enhancedPrompt = await aiEnhancePrompt(prompt, options);
+
+      // Ask user how they want to proceed
+      const userChoice = await confirmEnhancedPrompt(enhancedPrompt, prompt, options);
+      if (!userChoice.proceed) {
+        spinner.stop();
+        console.log(chalk.yellow('Analysis cancelled by user.'));
+        return;
+      }
+
+      // Use the chosen prompt for analysis
+      const result = await runGeminiAnalysis(analysisPath, userChoice.finalPrompt, options.model, options.verbose);
 
       // Always pass to validator agent for final validation and fixes
       if (options.verbose) {
@@ -189,7 +200,7 @@ program
       }
 
       // Test with a simple prompt
-      const testResult = await runGeminiAnalysis('.', 'Say "Hello, Gemini CLI is working!" and nothing else.', 'gemini-pro', true);
+      const testResult = await runGeminiAnalysis('.', 'Say "Hello, Gemini CLI is working!" and nothing else.', 'gemini-2.5-pro', true);
 
       spinner.succeed(chalk.green('✅ Gemini CLI test passed'));
       console.log(chalk.blue('🎉 Response:'), testResult.trim());
@@ -203,7 +214,7 @@ program
 
 // Helper functions
 function getDefaultPrompt() {
-  return `Analyze this codebase and generate a comprehensive, detailed Mermaid flowchart diagram that maps the complete system architecture and data flows.
+  return `Analyze this codebase and generate a comprehensive, detailed markdown with Mermaid (v9) diagrams that map the domain architecture and data flows.
 
 REQUIREMENTS:
 1. **Complete Component Mapping**: Identify and include ALL relevant components:
@@ -272,26 +283,134 @@ function shouldEnhancePrompt(prompt) {
 function enhanceDetailedDiagramPrompt(originalPrompt) {
   return `${originalPrompt}
 
-**ENHANCED REQUIREMENTS FOR DETAILED DIAGRAMS:**
+**ENHANCED REQUIREMENTS FOR ARCHITECTURAL DOCUMENTATION:**
 
-Create a comprehensive Mermaid flowchart that includes:
-- ALL relevant components (controllers, services, jobs, models, external APIs)
-- Complete success AND failure paths with error handling
-- Professional styling with color-coded component types
-- Clear subgraph organization by functional area
-- Comprehensive legend explaining the diagram
+Create comprehensive architectural documentation with Mermaid diagrams that includes:
+- **Clear Overview**: Start with a brief explanation of what the system does
+- **Comprehensive Diagrams**: ALL relevant components (controllers, services, jobs, models, external APIs)
+- **Complete Flows**: Both success AND failure paths with error handling
+- **Professional Styling**: Color-coded component types with clear legends
+- **Organized Structure**: Use subgraphs to group related functionality
+- **Engineer-Friendly**: Write as documentation that helps new engineers understand the architecture
 
-**CRITICAL OUTPUT REQUIREMENT:**
-You MUST output a complete Mermaid diagram using proper \`\`\`mermaid code blocks. Do NOT use any tools - just include the diagram directly in your response text.
+**CRITICAL OUTPUT REQUIREMENTS:**
+- Start with a clear heading and system overview
+- Include explanatory text before and after diagrams
+- Use proper \`\`\`mermaid code blocks for all diagrams
+- Add context that helps engineers understand the business logic
+- Structure as professional architectural documentation
 
-Example structure:
+**EXAMPLE STRUCTURE:**
+# System Architecture Overview
+Brief explanation of what this system does...
+## Payment Processing Flow
+The payment system handles...
 \`\`\`mermaid
 flowchart TD
     %% Your comprehensive diagram here
-    %% Include styling and legend
 \`\`\`
+## Key Components
+- **Controllers**: Handle HTTP requests...
 
-Generate the complete diagram now.`;
+Generate complete architectural documentation now.`;
+}
+
+// AI enhance step: analyze user's prompt and enhance it with domain-specific details
+async function aiEnhancePrompt(originalPrompt, options) {
+  if (options.verbose) {
+    console.log(chalk.blue('🤖 AI Enhance: Analyzing your request...'));
+  }
+
+  // Get the base comprehensive prompt template
+  const basePrompt = getDefaultPrompt();
+
+  const enhancePrompt = `You are an AI prompt enhancement specialist. Your role is to:
+
+1. **ANALYZE** the user's request to understand what domain/system they want documented
+2. **CUSTOMIZE** the comprehensive base prompt with domain-specific details
+3. **ENHANCE** with relevant technical requirements for that specific domain
+
+**USER'S ORIGINAL REQUEST:**
+"${originalPrompt}"
+
+**BASE COMPREHENSIVE PROMPT TEMPLATE:**
+${basePrompt}
+
+**YOUR TASKS:**
+1. Identify the domain (e.g., payment processing, authentication, API gateway, microservices, etc.)
+2. Take the base prompt and customize it for the specific domain and language/framework
+3. Add domain-specific components, patterns, and technical details
+4. Include relevant decision points and error handling scenarios
+
+**ENHANCEMENT GUIDELINES:**
+- Use the base prompt as your foundation - it has comprehensive architectural analysis requirements
+- Customize the component examples for the specific domain (e.g., PaymentService, AuthController, etc.)
+- Add domain-specific flows and patterns
+- Include relevant architectural boundaries (microservices, UI, database, etc.)
+- Specify important decision points (success/failure/error paths)
+- Maintain the user's original intent while leveraging the comprehensive base template
+
+**OUTPUT FORMAT:**
+Return ONLY the enhanced prompt that will be used for analysis. Do not include explanations or commentary.
+
+**EXAMPLE:**
+Original: "Document the user authentication system"
+Enhanced: [Base prompt customized with authentication-specific components like AuthController, UserService, JWT handling, OAuth flows, session management, password reset, etc.]
+
+Provide the enhanced prompt now:`;
+
+  try {
+    const spinner = ora('🤖 Enhancing your request...').start();
+    const enhancedPrompt = await runGeminiPrompt(enhancePrompt, options.model, false);
+    spinner.succeed(chalk.green('✅ Request enhanced'));
+
+    return enhancedPrompt.trim();
+  } catch (error) {
+    if (options.verbose) {
+      console.log(chalk.yellow('⚠️  Enhancement failed, using original prompt'));
+    }
+    return originalPrompt;
+  }
+}
+
+// Ask user to choose how to proceed with the enhanced prompt
+async function confirmEnhancedPrompt(enhancedPrompt, originalPrompt, options) {
+  console.log(chalk.blue('\n🎯 Enhanced Analysis Request:'));
+  console.log(chalk.gray('────────────────────────────────────────────────────────────────────────────────'));
+  console.log(enhancedPrompt);
+  console.log(chalk.gray('────────────────────────────────────────────────────────────────────────────────'));
+
+  const { choice } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'choice',
+      message: 'How would you like to proceed?',
+      choices: [
+        {
+          name: '✅ Use enhanced request (recommended)',
+          value: 'enhanced',
+          short: 'Enhanced'
+        },
+        {
+          name: '📝 Use original request as-is',
+          value: 'original',
+          short: 'Original'
+        },
+        {
+          name: '❌ Cancel analysis',
+          value: 'cancel',
+          short: 'Cancel'
+        }
+      ],
+      default: 'enhanced'
+    }
+  ]);
+
+  return {
+    proceed: choice !== 'cancel',
+    useEnhanced: choice === 'enhanced',
+    finalPrompt: choice === 'enhanced' ? enhancedPrompt : originalPrompt
+  };
 }
 
 async function validatorAgent(firstDraft, analysisPath, options) {
@@ -300,40 +419,40 @@ async function validatorAgent(firstDraft, analysisPath, options) {
   }
 
   // Create the validator agent prompt
-  const validatorPrompt = `You are a specialized Mermaid Diagram Validator Agent. Your role is to:
-
-**ANALYZE** the provided Mermaid diagram markdown and **FIX** any syntax errors, rendering issues, or improvements needed.
+  const validatorPrompt = `You are a specialized Mermaid Diagram Validator Agent. Your role is to produce clean, documentation-ready markdown.
 
 **YOUR TASKS:**
-1. **Validate Syntax**: Check for proper Mermaid syntax, correct arrow types, valid node IDs
-2. **Fix Errors**: Correct any parsing errors that would prevent rendering
-3. **Improve Quality**: Enhance styling, organization, and readability
-4. **Ensure Rendering**: Make sure the diagram will render perfectly in any Mermaid viewer
+1. **Validate Syntax**: Fix any Mermaid syntax errors that would prevent rendering
+2. **Clean Output**: Remove any processing commentary, validation notes, or technical details
+3. **Documentation Focus**: Ensure the output is readable by engineers as architectural documentation
+4. **Preserve Content**: Keep all explanatory text, headings, and structure that help understanding
 
 **COMMON ISSUES TO FIX:**
-- Malformed arrows (e.g., "- ->" should be "-->")
-- Invalid node IDs with special characters
-- Unclosed subgraphs (missing "end" statements)
-- Incorrect diagram type declarations
-- Missing or broken styling/CSS classes
-- Unmatched brackets or parentheses
+- **Node syntax with spaces/special chars**: A1(POST /api/payments) should be A1["POST /api/payments"]
+- **Malformed node definitions**: NodeID(["Text should be NodeID["Text"]
+- **Invalid arrows**: Remove semicolons after arrows
+- **Inline class syntax**: Replace ::: with class statements
+- **Unquoted labels**: Special characters need proper quoting
+- **Missing or broken styling definitions**
 
 **INPUT - FIRST DRAFT TO VALIDATE:**
 ${firstDraft}
 
 **CRITICAL OUTPUT REQUIREMENTS:**
-- Return the COMPLETE corrected markdown (including any text outside the Mermaid blocks)
-- Ensure all Mermaid diagrams use proper \`\`\`mermaid code blocks
-- Fix all syntax errors while preserving the original intent and structure
-- Make the diagram production-ready and render-perfect
+- Return ONLY the clean, final markdown documentation
+- NO validation commentary, processing notes, or "corrected output" headers
+- NO technical details about what was fixed
+- The output should read like professional architectural documentation
+- Include explanatory text, headings, and context that help engineers understand the system
+- Ensure all Mermaid diagrams use proper syntax and will render correctly
 
-**OUTPUT:** The validated and corrected markdown with perfect Mermaid diagrams.`;
+**OUTPUT:** Clean, documentation-ready markdown that serves as architectural overview for engineers.`;
 
   try {
     const spinner = ora('🔍 Validator Agent processing...').start();
 
-    // Run the validator agent with a fresh gemini-cli instance
-    const validatedResult = await runGeminiAnalysis(analysisPath, validatorPrompt, options.model, false);
+    // Run the validator agent with just the prompt (no file analysis needed)
+    const validatedResult = await runGeminiPrompt(validatorPrompt, 'gemini-2.5-flash', false);
 
     spinner.succeed(chalk.green('✅ Validator Agent completed validation'));
 
@@ -411,11 +530,61 @@ async function cloneRepository(repoUrl, baseDir, verbose = false, branch = null)
   });
 }
 
-async function runGeminiAnalysis(analysisPath, prompt, model = 'gemini-pro', verbose = false) {
+// Function to run gemini with just a prompt (for validator agent)
+async function runGeminiPrompt(prompt, model = 'gemini-2.5-pro', verbose = false) {
   return new Promise((resolve, reject) => {
     const args = [];
 
-    if (model && model !== 'gemini-pro') {
+    if (model && model !== 'gemini-2.5-pro') {
+      args.push('--model', model);
+    }
+
+    // Just run gemini with the prompt (no file analysis)
+    args.push(prompt);
+
+    if (verbose) {
+      console.log(chalk.gray(`Running: gemini ${args.join(' ')}`));
+    }
+
+    const geminiProcess = spawn('gemini', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env }
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    geminiProcess.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      if (verbose) {
+        console.log(chalk.gray(`📝 Received ${chunk.length} characters from Gemini`));
+      }
+    });
+
+    geminiProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    geminiProcess.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout.trim());
+      } else {
+        reject(new Error(`Gemini CLI failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    geminiProcess.on('error', (error) => {
+      reject(new Error(`Failed to run Gemini CLI: ${error.message}`));
+    });
+  });
+}
+
+async function runGeminiAnalysis(analysisPath, prompt, model = 'gemini-2.5-pro', verbose = false) {
+  return new Promise((resolve, reject) => {
+    const args = [];
+
+    if (model && model !== 'gemini-2.5-pro') {
       args.push('--model', model);
     }
 
@@ -470,7 +639,7 @@ async function runGeminiAnalysis(analysisPath, prompt, model = 'gemini-pro', ver
       clearInterval(feedbackInterval);
       if (code === 0) {
         if (verbose) {
-          console.log(chalk.green(`✅ Gemini analysis completed (${stdout.length} characters)`));
+          console.log(chalk.green(`✅ AI analysis completed (${stdout.length} characters)`));
         }
         resolve(stdout.trim());
       } else {
