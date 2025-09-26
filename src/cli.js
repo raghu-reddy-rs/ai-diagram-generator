@@ -74,19 +74,8 @@ program
         gitInfo = await getGitDiffInfo(analysisPath, options.branch, options.verbose);
       }
 
-      // Get prompt
+      // Get prompt (without git context - that will be added after enhancement)
       let prompt = options.prompt || getDefaultPrompt();
-
-      // Enhance prompt with git information if available
-      if (gitInfo && gitInfo.diffWithMaster) {
-        const gitContext = `\n\n## Git Context\n` +
-          `Current Branch: ${gitInfo.currentBranch}\n` +
-          `Base Branch: ${gitInfo.diffWithMaster.baseBranch}\n` +
-          `Files Changed:\n${gitInfo.diffWithMaster.changes}\n\n` +
-          `Please focus your analysis on the changes in the ${gitInfo.currentBranch} branch compared to ${gitInfo.diffWithMaster.baseBranch}.`;
-
-        prompt = prompt + gitContext;
-      }
 
       if (options.verbose) {
         spinner.stop();
@@ -110,8 +99,20 @@ program
       // AI enhance step: analyze and enhance the user's prompt
       const enhancedPrompt = await aiEnhancePrompt(prompt, options);
 
+      // Append git context to enhanced prompt if available (after enhancement, not during)
+      let finalEnhancedPrompt = enhancedPrompt;
+      if (gitInfo && gitInfo.diffWithMaster) {
+        const gitContext = `\n\n## Git Context\n` +
+          `Current Branch: ${gitInfo.currentBranch}\n` +
+          `Base Branch: ${gitInfo.diffWithMaster.baseBranch}\n` +
+          `Files Changed:\n${gitInfo.diffWithMaster.changes}\n\n` +
+          `Please focus your analysis on the changes in the ${gitInfo.currentBranch} branch compared to ${gitInfo.diffWithMaster.baseBranch}.`;
+
+        finalEnhancedPrompt = enhancedPrompt + gitContext;
+      }
+
       // Ask user how they want to proceed
-      const userChoice = await confirmEnhancedPrompt(enhancedPrompt, prompt);
+      const userChoice = await confirmEnhancedPrompt(finalEnhancedPrompt, prompt);
       if (!userChoice.proceed) {
         spinner.stop();
         console.log(chalk.yellow('Analysis cancelled by user.'));
