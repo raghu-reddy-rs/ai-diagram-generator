@@ -672,6 +672,16 @@ async function cloneRepository(repoUrl, baseDir, verbose = false, branch = null)
 
   await fs.ensureDir(cloneDir);
 
+  // Handle authentication for private repos
+  let authenticatedUrl = repoUrl;
+  if (process.env.GITHUB_TOKEN && repoUrl.includes('github.com')) {
+    // Convert to authenticated HTTPS URL
+    authenticatedUrl = repoUrl.replace('https://github.com/', `https://${process.env.GITHUB_TOKEN}@github.com/`);
+    if (verbose) {
+      console.log(chalk.gray('Using GitHub token for authentication'));
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const args = ['clone'];
 
@@ -679,7 +689,7 @@ async function cloneRepository(repoUrl, baseDir, verbose = false, branch = null)
       args.push('-b', branch);
     }
 
-    args.push(repoUrl, cloneDir);
+    args.push(authenticatedUrl, cloneDir);
 
     if (verbose) {
       console.log(chalk.gray(`Running: git ${args.join(' ')}`));
