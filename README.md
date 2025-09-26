@@ -66,6 +66,7 @@ flowchart TD
    nano .env
 
    # Build and start container
+   docker-compose build
    docker-compose up -d
 
    # Get shell access
