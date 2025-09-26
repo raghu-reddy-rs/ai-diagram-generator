@@ -67,6 +67,10 @@ program
         spinner.text = 'Preparing analysis...';
       }
 
+      // Detect repository context (language/framework) for better prompt tailoring
+      const frameworkContext = await runGeminiAnalysis(analysisPath, "Determine which language and framework is under consideration", options.model, false);
+
+
       // Gather git information if it's a cloned repository
       let gitInfo = null;
       if (isCloned || await isGitRepository(analysisPath)) {
@@ -94,10 +98,10 @@ program
         spinner.start('Starting AI analysis...');
       }
 
-      spinner.text = 'Running AI analysis...';
-
       // AI enhance step: analyze and enhance the user's prompt
-      const enhancedPrompt = await aiEnhancePrompt(prompt, options);
+      spinner.stop(); // Stop main spinner before enhancement
+      const enhancedPrompt = await aiEnhancePrompt(prompt, options, frameworkContext);
+      spinner.start('Running AI analysis...'); // Restart main spinner
 
       // Append git context to enhanced prompt if available (after enhancement, not during)
       let finalEnhancedPrompt = enhancedPrompt;
@@ -289,13 +293,15 @@ IMPORTANT: Generate a production-ready diagram with complete coverage, proper st
 
 
 // AI enhance step: analyze user's prompt and enhance it with domain-specific details
-async function aiEnhancePrompt(originalPrompt, options) {
+async function aiEnhancePrompt(originalPrompt, options, frameworkContext) {
   if (options.verbose) {
     console.log(chalk.blue('🤖 AI Enhance: Analyzing your request...'));
   }
 
   // Get the base comprehensive prompt template
   const basePrompt = getDefaultPrompt();
+
+  const projectContext = frameworkContext ? `\n\nPROJECT CONTEXT (detected from target repo):\n${frameworkContext}\n` : '';
 
   const enhancePrompt = `You are an AI prompt enhancement specialist. Your role is to:
 
@@ -305,15 +311,16 @@ async function aiEnhancePrompt(originalPrompt, options) {
 
 **USER'S ORIGINAL REQUEST:**
 "${originalPrompt}"
-
+${projectContext}
 **BASE COMPREHENSIVE PROMPT TEMPLATE:**
 ${basePrompt}
 
 **YOUR TASKS:**
-1. Identify the domain (e.g., payment processing, authentication, API gateway, microservices, etc.)
-2. Take the base prompt and customize it for the specific domain and language/framework
-3. Add domain-specific components, patterns, and technical details
-4. Include relevant decision points and error handling scenarios
+1. Use the PROJECT CONTEXT (language/framework) to specialize the prompt. 
+2. Identify the domain/system being analyzed (e.g., payment, auth, API, terraform, etc.)
+3. Take the base prompt and customize it for the specific domain and language/framework
+4. Add domain-specific components, patterns, and technical details
+5. Include relevant decision points and error handling scenarios
 
 **ENHANCEMENT GUIDELINES:**
 - Use the base prompt as your foundation - it has comprehensive architectural analysis requirements
