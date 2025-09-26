@@ -54,28 +54,46 @@ flowchart TD
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Docker (Recommended)
 
-1. **Node.js** (v16 or higher)
-2. **Git** (for repository cloning)
-3. **Gemini CLI**: Install Google's Gemini CLI
+1. **Prerequisites**: Docker and Docker Compose
+2. **Setup:**
    ```bash
-   npm install -g @google/gemini-cli
+   # Copy environment template
+   cp .env.example .env
+
+   # Edit .env and add your Gemini API key
+   nano .env
+
+   # Build and start container
+   docker-compose build
+   docker-compose up -d
+
+   # Get shell access
+   docker-compose exec diagram-generator bash
    ```
 
-### Installation
+3. **Usage in container:**
+   ```bash
+   # Analyze current directory (output automatically goes to ./output/ on host)
+   node src/cli.js analyze .
 
-1. **Clone or download this repository**
+   # Analyze a git repository
+   node src/cli.js analyze https://github.com/user/repo.git
+
+   # Analyze a specific branch
+   node src/cli.js analyze https://github.com/user/repo.git -b develop
+
+   # Results are automatically saved to ./output/ on your host machine
+   ```
+
+### Option 2: Local Installation
+
+1. **Prerequisites**: Node.js (v22+), Git, Gemini CLI
 2. **Install dependencies:**
    ```bash
    npm install
-   ```
-3. **Run the setup script:**
-   ```bash
    ./setup.sh
-   ```
-4. **Set your Gemini API key:**
-   ```bash
    export GEMINI_API_KEY="your-api-key-here"
    ```
 
@@ -97,7 +115,7 @@ node src/cli.js analyze --prompt "Create a system architecture diagram"
 ### Command Structure
 
 ```bash
-analyzer <command> [options]
+node src/cli.js <command> [options]
 ```
 
 ### Available Commands
@@ -106,17 +124,18 @@ analyzer <command> [options]
 
 ```bash
 # Basic usage
-analyzer analyze [path] [options]
+node src/cli.js analyze [path] [options]
 
 # Examples
-analyzer analyze                                    # Current directory
-analyzer analyze ./src                              # Specific directory
-analyzer analyze https://github.com/user/repo.git  # Git repository
+node src/cli.js analyze                                    # Current directory
+node src/cli.js analyze ./src                              # Specific directory
+node src/cli.js analyze https://github.com/user/repo.git  # Git repository
 ```
 
 **Options:**
 - `-p, --prompt <prompt>`: Custom analysis prompt
 - `-o, --output <file>`: Output file path (default: analysis-output.md)
+- `-b, --branch <branch>`: Git branch to clone (for repository URLs)
 - `--api-key <key>`: Gemini API key (overrides environment)
 - `--model <model>`: Gemini model to use (default: gemini-2.5-pro)
 - `--clone-dir <dir>`: Directory for cloned repos (default: ./temp-repos)
@@ -126,11 +145,11 @@ analyzer analyze https://github.com/user/repo.git  # Git repository
 #### `clone` - Clone repositories for analysis
 
 ```bash
-analyzer clone <repo-url> [options]
+node src/cli.js clone <repo-url> [options]
 
 # Examples
-analyzer clone https://github.com/user/repo.git
-analyzer clone https://github.com/user/repo.git -b develop
+node src/cli.js clone https://github.com/user/repo.git
+node src/cli.js clone https://github.com/user/repo.git -b develop
 ```
 
 **Options:**
@@ -141,37 +160,46 @@ analyzer clone https://github.com/user/repo.git -b develop
 #### `test` - Test Gemini CLI connection
 
 ```bash
-analyzer test [options]
+node src/cli.js test [options]
 
 # Examples
-analyzer test
-analyzer test --api-key "your-key-here"
+node src/cli.js test
+node src/cli.js test --api-key "your-key-here"
 ```
 ## 🎯 Example Use Cases
 
 ### System Architecture Analysis
 ```bash
-analyzer analyze --prompt "Create a comprehensive system architecture diagram showing all components, their relationships, and data flows"
+node src/cli.js analyze --prompt "Create a comprehensive system architecture diagram showing all components, their relationships, and data flows"
+```
+
+### Branch-Specific Analysis
+```bash
+# Analyze the main branch
+node src/cli.js analyze https://github.com/user/repo.git
+
+# Analyze development branch with custom prompt
+node src/cli.js analyze https://github.com/user/repo.git -b develop --prompt "Focus on recent changes and new features"
 ```
 
 ### Payment Flow Documentation
 ```bash
-analyzer analyze --prompt "Analyze payment processing flows and generate a sequence diagram showing the complete payment lifecycle from initiation to completion"
+node src/cli.js analyze --prompt "Analyze payment processing flows and generate a sequence diagram showing the complete payment lifecycle from initiation to completion"
 ```
 
 ### Database Schema Visualization
 ```bash
-analyzer analyze --prompt "Generate an entity-relationship diagram from database models, including relationships and key constraints"
+node src/cli.js analyze --prompt "Generate an entity-relationship diagram from database models, including relationships and key constraints"
 ```
 
 ### API Documentation
 ```bash
-analyzer analyze --prompt "Create sequence diagrams showing API request/response flows, including authentication and error handling"
+node src/cli.js analyze --prompt "Create sequence diagrams showing API request/response flows, including authentication and error handling"
 ```
 
 ### Microservices Architecture
 ```bash
-analyzer analyze --prompt "Document microservices architecture with service boundaries, communication patterns, and dependencies"
+node src/cli.js analyze --prompt "Document microservices architecture with service boundaries, communication patterns, and dependencies"
 ```
 
 ## 🔧 Advanced Features
@@ -217,7 +245,36 @@ diagram-generator/
 └── README.md         # This file
 ```
 
-## 🛠️ Configuration
+## � Docker Usage
+
+The Docker setup provides a clean, isolated environment with all dependencies pre-installed.
+
+### Basic Commands
+
+```bash
+# Start container
+docker-compose up -d
+
+# Access container shell
+docker-compose exec diagram-generator bash
+
+# Run analysis inside container
+docker-compose exec diagram-generator node src/cli.js analyze https://github.com/user/repo.git
+
+# View output (saved to ./output/ on host)
+ls output/
+
+# Stop container
+docker-compose down
+```
+
+### File Access
+
+- **Output**: Results are automatically saved to `./output/` on your host machine
+- **Git cloning**: The application clones repositories directly inside the container
+- **Persistent storage**: Analysis results persist on your host machine
+
+## �🛠️ Configuration
 
 ### Environment Variables
 
@@ -262,7 +319,7 @@ Global options available for all commands:
 
 Enable verbose logging for detailed information:
 ```bash
-analyzer analyze --verbose
+node src/cli.js analyze --verbose
 ```
 
 ## 📚 Documentation

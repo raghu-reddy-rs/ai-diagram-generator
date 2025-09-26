@@ -1,2 +1,52 @@
-.env
+# Environment variables (contains sensitive information)
+.env*
+
+# Bevel directory
 .bevel/
+
+# Docker-related temporary files and directories
+temp-repos/
+output/
+external-data/
+
+# Docker volumes and data
+docker-data/
+docker-volumes/
+
+# Analysis output files (generated content)
+analysis-output*.md
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

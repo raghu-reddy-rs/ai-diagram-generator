@@ -1,0 +1,7 @@
+node_modules/
+.env
+.git/
+output/
+temp-repos/
+*.log
+.DS_Store
