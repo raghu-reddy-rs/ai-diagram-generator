@@ -80,6 +80,9 @@ flowchart TD
    # Analyze a git repository
    node src/cli.js analyze https://github.com/user/repo.git
 
+   # Analyze a specific branch
+   node src/cli.js analyze https://github.com/user/repo.git -b develop
+
    # Results are automatically saved to ./output/ on your host machine
    ```
 
@@ -131,6 +134,7 @@ analyzer analyze https://github.com/user/repo.git  # Git repository
 **Options:**
 - `-p, --prompt <prompt>`: Custom analysis prompt
 - `-o, --output <file>`: Output file path (default: analysis-output.md)
+- `-b, --branch <branch>`: Git branch to clone (for repository URLs)
 - `--api-key <key>`: Gemini API key (overrides environment)
 - `--model <model>`: Gemini model to use (default: gemini-2.5-pro)
 - `--clone-dir <dir>`: Directory for cloned repos (default: ./temp-repos)
@@ -166,6 +170,15 @@ analyzer test --api-key "your-key-here"
 ### System Architecture Analysis
 ```bash
 analyzer analyze --prompt "Create a comprehensive system architecture diagram showing all components, their relationships, and data flows"
+```
+
+### Branch-Specific Analysis
+```bash
+# Analyze the main branch
+analyzer analyze https://github.com/user/repo.git
+
+# Analyze development branch with custom prompt
+analyzer analyze https://github.com/user/repo.git -b develop --prompt "Focus on recent changes and new features"
 ```
 
 ### Payment Flow Documentation

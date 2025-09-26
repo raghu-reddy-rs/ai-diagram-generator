@@ -34,8 +34,11 @@ node src/cli.js analyze .
 # Analyze a git repository (clones automatically)
 node src/cli.js analyze https://github.com/user/repo.git
 
-# Use custom prompts
-node src/cli.js analyze https://github.com/user/repo.git --prompt "Create a sequence diagram"
+# Analyze a specific branch
+node src/cli.js analyze https://github.com/user/repo.git -b develop
+
+# Use custom prompts with branch
+node src/cli.js analyze https://github.com/user/repo.git -b feature/payments --prompt "Create a sequence diagram"
 
 # Specify custom output filename (still goes to /app/output)
 node src/cli.js analyze . --output my-analysis.md

@@ -30,6 +30,7 @@ program
   .option('--api-key <key>', 'Gemini API key (overrides environment)')
   .option('--model <model>', 'Gemini model to use', 'gemini-2.5-pro')
   .option('--clone-dir <dir>', 'Directory to clone repos into', './temp-repos')
+  .option('-b, --branch <branch>', 'Git branch to clone (for repository URLs)')
   .option('--keep-clone', 'Keep cloned repository after analysis')
   .option('--verbose', 'Enable verbose logging')
   .action(async (targetPath, options) => {
@@ -54,7 +55,7 @@ program
       // Check if it's a git repository URL
       if (isGitUrl(targetPath)) {
         spinner.text = 'Cloning repository...';
-        analysisPath = await cloneRepository(targetPath, options.cloneDir, options.verbose);
+        analysisPath = await cloneRepository(targetPath, options.cloneDir, options.verbose, options.branch);
         isCloned = true;
         spinner.succeed(chalk.green('✅ Repository cloned successfully'));
         spinner.start('Preparing analysis...');
@@ -76,6 +77,9 @@ program
         console.log(chalk.gray(`   Model: ${options.model}`));
         console.log(chalk.gray(`   Prompt: ${prompt.substring(0, 100)}...`));
         console.log(chalk.gray(`   Output: ${options.output}`));
+        if (isCloned && options.branch) {
+          console.log(chalk.gray(`   Branch: ${options.branch}`));
+        }
         console.log('');
         spinner.start('Starting AI analysis...');
       }
