@@ -8,7 +8,7 @@ const chalk = require('chalk');
 const ora = require('ora');
 const path = require('path');
 const fs = require('fs-extra');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const inquirer = require('inquirer');
 
 
@@ -715,11 +715,18 @@ async function getGitDiffInfo(repoPath, branch, verbose = false) {
 
     // Check if it's a git repository
     try {
+      if (verbose) {
+        console.log(chalk.blue(`🔍 Checking git repository at: ${repoPath}`));
+      }
       execSync('git rev-parse --git-dir', { cwd: repoPath, stdio: 'pipe' });
       gitInfo.hasGitRepo = true;
+      if (verbose) {
+        console.log(chalk.green('✅ Git repository detected'));
+      }
     } catch (error) {
       if (verbose) {
-        console.log(chalk.yellow('⚠️  Not a git repository, skipping git analysis'));
+        console.log(chalk.yellow(`⚠️  Not a git repository, skipping git analysis. Error: ${error.message}`));
+        console.log(chalk.gray(`   Attempted path: ${repoPath}`));
       }
       return gitInfo;
     }
