@@ -17,7 +17,7 @@ This guide provides comprehensive usage instructions and advanced techniques for
 
 2. **Verify installation:**
    ```bash
-   analyzer test
+   node src/cli.js test
    ```
 
 3. **First analysis:**
@@ -29,7 +29,7 @@ This guide provides comprehensive usage instructions and advanced techniques for
 
 ### Core Commands
 
-All commands support the `analyzer` alias (when installed globally) or `node src/cli.js` for local usage.
+All commands use `node src/cli.js` for local usage.
 
 #### Analysis Command
 ```bash
@@ -52,22 +52,22 @@ node src/cli.js analyze [path] [options]
 #### Repository Management
 ```bash
 # Clone for later analysis
-analyzer clone https://github.com/user/repo.git
+node src/cli.js clone https://github.com/user/repo.git
 
 # Clone specific branch
-analyzer clone https://github.com/user/repo.git -b feature-branch
+node src/cli.js clone https://github.com/user/repo.git -b feature-branch
 
 # Clone to specific directory
-analyzer clone https://github.com/user/repo.git -d ./my-repos
+node src/cli.js clone https://github.com/user/repo.git -d ./my-repos
 ```
 
 #### Testing and Validation
 ```bash
 # Test API connection
-analyzer test
+node src/cli.js test
 
 # Test with specific API key
-analyzer test --api-key "test-key"
+node src/cli.js test --api-key "test-key"
 ```
 
 ## 🎯 Advanced Usage Patterns
@@ -215,7 +215,7 @@ node src/cli.js analyze --prompt "Create developer-focused documentation with im
 echo $GEMINI_API_KEY
 
 # Test with explicit key
-analyzer test --api-key "your-actual-key"
+node src/cli.js test --api-key "your-actual-key"
 
 # Check for hidden characters
 export GEMINI_API_KEY="$(echo 'your-key' | tr -d '[:space:]')"

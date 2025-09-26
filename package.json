@@ -3,9 +3,7 @@
   "version": "1.0.0",
   "description": "Simple file analyzer that uses Gemini CLI to analyze files and generate Mermaid diagrams",
   "main": "src/index.js",
-  "bin": {
-    "analyzer": "./src/cli.js"
-  },
+
   "scripts": {
     "start": "node src/cli.js",
     "analyze": "node src/cli.js analyze",

@@ -25,7 +25,7 @@
 
 ## Usage
 
-Inside the container, you can run the analyzer normally:
+Inside the container, you can run the CLI normally:
 
 ```bash
 # Analyze current directory (output goes to /app/output automatically)
