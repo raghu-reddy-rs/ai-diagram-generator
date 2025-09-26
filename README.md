@@ -54,28 +54,42 @@ flowchart TD
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Docker (Recommended)
 
-1. **Node.js** (v16 or higher)
-2. **Git** (for repository cloning)
-3. **Gemini CLI**: Install Google's Gemini CLI
+1. **Prerequisites**: Docker and Docker Compose
+2. **Setup:**
    ```bash
-   npm install -g @google/gemini-cli
+   # Copy environment template
+   cp .env.example .env
+
+   # Edit .env and add your Gemini API key
+   nano .env
+
+   # Build and start container
+   docker-compose up -d
+
+   # Get shell access
+   docker-compose exec diagram-generator bash
    ```
 
-### Installation
+3. **Usage in container:**
+   ```bash
+   # Analyze current directory
+   node src/cli.js analyze .
 
-1. **Clone or download this repository**
+   # Analyze a git repository
+   node src/cli.js analyze https://github.com/user/repo.git
+
+   # Results are saved to ./output/ on your host machine
+   ```
+
+### Option 2: Local Installation
+
+1. **Prerequisites**: Node.js (v22+), Git, Gemini CLI
 2. **Install dependencies:**
    ```bash
    npm install
-   ```
-3. **Run the setup script:**
-   ```bash
    ./setup.sh
-   ```
-4. **Set your Gemini API key:**
-   ```bash
    export GEMINI_API_KEY="your-api-key-here"
    ```
 
@@ -217,7 +231,36 @@ diagram-generator/
 └── README.md         # This file
 ```
 
-## 🛠️ Configuration
+## � Docker Usage
+
+The Docker setup provides a clean, isolated environment with all dependencies pre-installed.
+
+### Basic Commands
+
+```bash
+# Start container
+docker-compose up -d
+
+# Access container shell
+docker-compose exec diagram-generator bash
+
+# Run analysis inside container
+docker-compose exec diagram-generator node src/cli.js analyze https://github.com/user/repo.git
+
+# View output (saved to ./output/ on host)
+ls output/
+
+# Stop container
+docker-compose down
+```
+
+### File Access
+
+- **Output**: Results are automatically saved to `./output/` on your host machine
+- **Git cloning**: The application clones repositories directly inside the container
+- **Persistent storage**: Analysis results persist on your host machine
+
+## �🛠️ Configuration
 
 ### Environment Variables
 
