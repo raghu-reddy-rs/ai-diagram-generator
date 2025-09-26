@@ -115,7 +115,7 @@ node src/cli.js analyze --prompt "Create a system architecture diagram"
 ### Command Structure
 
 ```bash
-analyzer <command> [options]
+node src/cli.js <command> [options]
 ```
 
 ### Available Commands
@@ -124,12 +124,12 @@ analyzer <command> [options]
 
 ```bash
 # Basic usage
-analyzer analyze [path] [options]
+node src/cli.js analyze [path] [options]
 
 # Examples
-analyzer analyze                                    # Current directory
-analyzer analyze ./src                              # Specific directory
-analyzer analyze https://github.com/user/repo.git  # Git repository
+node src/cli.js analyze                                    # Current directory
+node src/cli.js analyze ./src                              # Specific directory
+node src/cli.js analyze https://github.com/user/repo.git  # Git repository
 ```
 
 **Options:**
@@ -145,11 +145,11 @@ analyzer analyze https://github.com/user/repo.git  # Git repository
 #### `clone` - Clone repositories for analysis
 
 ```bash
-analyzer clone <repo-url> [options]
+node src/cli.js clone <repo-url> [options]
 
 # Examples
-analyzer clone https://github.com/user/repo.git
-analyzer clone https://github.com/user/repo.git -b develop
+node src/cli.js clone https://github.com/user/repo.git
+node src/cli.js clone https://github.com/user/repo.git -b develop
 ```
 
 **Options:**
@@ -160,46 +160,46 @@ analyzer clone https://github.com/user/repo.git -b develop
 #### `test` - Test Gemini CLI connection
 
 ```bash
-analyzer test [options]
+node src/cli.js test [options]
 
 # Examples
-analyzer test
-analyzer test --api-key "your-key-here"
+node src/cli.js test
+node src/cli.js test --api-key "your-key-here"
 ```
 ## 🎯 Example Use Cases
 
 ### System Architecture Analysis
 ```bash
-analyzer analyze --prompt "Create a comprehensive system architecture diagram showing all components, their relationships, and data flows"
+node src/cli.js analyze --prompt "Create a comprehensive system architecture diagram showing all components, their relationships, and data flows"
 ```
 
 ### Branch-Specific Analysis
 ```bash
 # Analyze the main branch
-analyzer analyze https://github.com/user/repo.git
+node src/cli.js analyze https://github.com/user/repo.git
 
 # Analyze development branch with custom prompt
-analyzer analyze https://github.com/user/repo.git -b develop --prompt "Focus on recent changes and new features"
+node src/cli.js analyze https://github.com/user/repo.git -b develop --prompt "Focus on recent changes and new features"
 ```
 
 ### Payment Flow Documentation
 ```bash
-analyzer analyze --prompt "Analyze payment processing flows and generate a sequence diagram showing the complete payment lifecycle from initiation to completion"
+node src/cli.js analyze --prompt "Analyze payment processing flows and generate a sequence diagram showing the complete payment lifecycle from initiation to completion"
 ```
 
 ### Database Schema Visualization
 ```bash
-analyzer analyze --prompt "Generate an entity-relationship diagram from database models, including relationships and key constraints"
+node src/cli.js analyze --prompt "Generate an entity-relationship diagram from database models, including relationships and key constraints"
 ```
 
 ### API Documentation
 ```bash
-analyzer analyze --prompt "Create sequence diagrams showing API request/response flows, including authentication and error handling"
+node src/cli.js analyze --prompt "Create sequence diagrams showing API request/response flows, including authentication and error handling"
 ```
 
 ### Microservices Architecture
 ```bash
-analyzer analyze --prompt "Document microservices architecture with service boundaries, communication patterns, and dependencies"
+node src/cli.js analyze --prompt "Document microservices architecture with service boundaries, communication patterns, and dependencies"
 ```
 
 ## 🔧 Advanced Features
@@ -319,7 +319,7 @@ Global options available for all commands:
 
 Enable verbose logging for detailed information:
 ```bash
-analyzer analyze --verbose
+node src/cli.js analyze --verbose
 ```
 
 ## 📚 Documentation

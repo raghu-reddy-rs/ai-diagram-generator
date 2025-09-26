@@ -197,7 +197,7 @@ program
 
       spinner.succeed(chalk.green(`✅ Repository cloned: ${clonePath}`));
       console.log(chalk.blue('\n📝 Next steps:'));
-      console.log(`1. Run: analyzer analyze "${clonePath}"`);
+      console.log(`1. Run: node src/cli.js analyze "${clonePath}"`);
       console.log('2. Use custom prompts with --prompt option');
 
     } catch (error) {
