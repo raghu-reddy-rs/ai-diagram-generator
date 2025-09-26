@@ -28,7 +28,7 @@
 Inside the container, you can run the analyzer normally:
 
 ```bash
-# Analyze current directory
+# Analyze current directory (output goes to /app/output automatically)
 node src/cli.js analyze .
 
 # Analyze a git repository (clones automatically)
@@ -36,13 +36,16 @@ node src/cli.js analyze https://github.com/user/repo.git
 
 # Use custom prompts
 node src/cli.js analyze https://github.com/user/repo.git --prompt "Create a sequence diagram"
+
+# Specify custom output filename (still goes to /app/output)
+node src/cli.js analyze . --output my-analysis.md
 ```
 
 ## File Access
 
-- **Output files**: Automatically saved to `./output/` on your host machine
+- **Output files**: Automatically saved to `/app/output/` inside container, which maps to `./output/` on your host machine
 - **Git repositories**: Cloned inside the container as needed
-- **Persistent results**: All analysis results persist on your host
+- **Persistent results**: All analysis results persist on your host in the `./output/` directory
 
 ## Management
 

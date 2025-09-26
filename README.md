@@ -74,13 +74,13 @@ flowchart TD
 
 3. **Usage in container:**
    ```bash
-   # Analyze current directory
+   # Analyze current directory (output automatically goes to ./output/ on host)
    node src/cli.js analyze .
 
    # Analyze a git repository
    node src/cli.js analyze https://github.com/user/repo.git
 
-   # Results are saved to ./output/ on your host machine
+   # Results are automatically saved to ./output/ on your host machine
    ```
 
 ### Option 2: Local Installation

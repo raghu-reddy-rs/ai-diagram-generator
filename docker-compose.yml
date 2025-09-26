@@ -6,6 +6,8 @@ services:
     container_name: diagram-generator
     env_file:
       - .env
+    environment:
+      - DEFAULT_OUTPUT_DIR=/app/output
     volumes:
       - ./output:/app/output
     tty: true

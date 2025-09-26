@@ -26,7 +26,7 @@ program
   .description('Analyze files and generate Mermaid diagrams using Gemini CLI')
   .argument('[path]', 'Path to analyze (directory, file, or git repo URL)', '.')
   .option('-p, --prompt <prompt>', 'Custom analysis prompt')
-  .option('-o, --output <file>', 'Output file path', 'analysis-output.md')
+  .option('-o, --output <file>', 'Output file path', getDefaultOutputPath())
   .option('--api-key <key>', 'Gemini API key (overrides environment)')
   .option('--model <model>', 'Gemini model to use', 'gemini-2.5-pro')
   .option('--clone-dir <dir>', 'Directory to clone repos into', './temp-repos')
@@ -889,6 +889,15 @@ Your response should be complete, well-formatted markdown documentation that can
       reject(new Error(`Failed to run Gemini CLI: ${error.message}`));
     });
   });
+}
+
+// Get default output path - use /app/output in Docker, current directory otherwise
+function getDefaultOutputPath() {
+  const outputDir = process.env.DEFAULT_OUTPUT_DIR;
+  if (outputDir) {
+    return path.join(outputDir, 'analysis-output.md');
+  }
+  return 'analysis-output.md';
 }
 
 // Handle uncaught errors
