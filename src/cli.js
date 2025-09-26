@@ -67,8 +67,26 @@ program
         spinner.text = 'Preparing analysis...';
       }
 
+      // Gather git information if it's a cloned repository
+      let gitInfo = null;
+      if (isCloned || await isGitRepository(analysisPath)) {
+        spinner.text = 'Analyzing git repository...';
+        gitInfo = await getGitDiffInfo(analysisPath, options.branch, options.verbose);
+      }
+
       // Get prompt
       let prompt = options.prompt || getDefaultPrompt();
+
+      // Enhance prompt with git information if available
+      if (gitInfo && gitInfo.diffWithMaster) {
+        const gitContext = `\n\n## Git Context\n` +
+          `Current Branch: ${gitInfo.currentBranch}\n` +
+          `Base Branch: ${gitInfo.diffWithMaster.baseBranch}\n` +
+          `Files Changed:\n${gitInfo.diffWithMaster.changes}\n\n` +
+          `Please focus your analysis on the changes in the ${gitInfo.currentBranch} branch compared to ${gitInfo.diffWithMaster.baseBranch}.`;
+
+        prompt = prompt + gitContext;
+      }
 
       if (options.verbose) {
         spinner.stop();
@@ -79,6 +97,9 @@ program
         console.log(chalk.gray(`   Output: ${options.output}`));
         if (isCloned && options.branch) {
           console.log(chalk.gray(`   Branch: ${options.branch}`));
+        }
+        if (gitInfo && gitInfo.diffWithMaster) {
+          console.log(chalk.gray(`   Git Diff: ${gitInfo.diffWithMaster.changes.split('\n').length} files changed`));
         }
         console.log('');
         spinner.start('Starting AI analysis...');
@@ -632,6 +653,16 @@ function isGitUrl(url) {
   return gitUrlPatterns.some(pattern => pattern.test(url));
 }
 
+// Check if a path is a git repository
+async function isGitRepository(repoPath) {
+  try {
+    execSync('git rev-parse --git-dir', { cwd: repoPath, stdio: 'pipe' });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 async function cloneRepository(repoUrl, baseDir, verbose = false, branch = null) {
   // Create unique directory name
   const repoName = path.basename(repoUrl, '.git');
@@ -669,6 +700,115 @@ async function cloneRepository(repoUrl, baseDir, verbose = false, branch = null)
       reject(new Error(`Failed to run git clone: ${error.message}`));
     });
   });
+}
+
+// Gather git diff information for branch comparison
+async function getGitDiffInfo(repoPath, branch, verbose = false) {
+  try {
+    const gitInfo = {
+      currentBranch: branch || 'unknown',
+      diffWithMaster: null,
+      commitInfo: null,
+      hasGitRepo: false
+    };
+
+    // Check if it's a git repository
+    try {
+      execSync('git rev-parse --git-dir', { cwd: repoPath, stdio: 'pipe' });
+      gitInfo.hasGitRepo = true;
+    } catch (error) {
+      if (verbose) {
+        console.log(chalk.yellow('⚠️  Not a git repository, skipping git analysis'));
+      }
+      return gitInfo;
+    }
+
+    // Get current branch if not specified
+    if (!gitInfo.currentBranch || gitInfo.currentBranch === 'unknown') {
+      try {
+        gitInfo.currentBranch = execSync('git branch --show-current', {
+          cwd: repoPath,
+          encoding: 'utf8'
+        }).trim();
+      } catch (error) {
+        gitInfo.currentBranch = 'detached-head';
+      }
+    }
+
+    // Get commit information for current branch
+    try {
+      const commitHash = execSync('git rev-parse HEAD', {
+        cwd: repoPath,
+        encoding: 'utf8'
+      }).trim();
+
+      const commitMessage = execSync('git log -1 --pretty=format:"%s"', {
+        cwd: repoPath,
+        encoding: 'utf8'
+      }).trim();
+
+      gitInfo.commitInfo = {
+        hash: commitHash.substring(0, 8),
+        message: commitMessage
+      };
+    } catch (error) {
+      if (verbose) {
+        console.log(chalk.yellow('⚠️  Could not get commit information'));
+      }
+    }
+
+    // Get diff with master/main branch
+    const masterBranches = ['master', 'main'];
+    for (const masterBranch of masterBranches) {
+      try {
+        // Check if master/main branch exists
+        execSync(`git show-ref --verify --quiet refs/heads/${masterBranch}`, {
+          cwd: repoPath,
+          stdio: 'pipe'
+        });
+
+        // Get diff if current branch is different from master/main
+        if (gitInfo.currentBranch !== masterBranch) {
+          const diffOutput = execSync(`git diff ${masterBranch}...HEAD --name-status`, {
+            cwd: repoPath,
+            encoding: 'utf8'
+          }).trim();
+
+          if (diffOutput) {
+            gitInfo.diffWithMaster = {
+              baseBranch: masterBranch,
+              changes: diffOutput,
+              summary: `Changes in ${gitInfo.currentBranch} compared to ${masterBranch}`
+            };
+          }
+        }
+        break; // Found a master branch, stop looking
+      } catch (error) {
+        // Continue to next master branch candidate
+        continue;
+      }
+    }
+
+    if (verbose && gitInfo.diffWithMaster) {
+      console.log(chalk.blue(`\n📊 Git Analysis:`));
+      console.log(chalk.gray(`   Current Branch: ${gitInfo.currentBranch}`));
+      console.log(chalk.gray(`   Base Branch: ${gitInfo.diffWithMaster.baseBranch}`));
+      console.log(chalk.gray(`   Files Changed: ${gitInfo.diffWithMaster.changes.split('\n').length}`));
+    }
+
+    return gitInfo;
+  } catch (error) {
+    if (verbose) {
+      console.log(chalk.yellow(`⚠️  Git analysis failed: ${error.message}`));
+    }
+    return {
+      currentBranch: branch || 'unknown',
+      diffWithMaster: null,
+      commitInfo: null,
+      hasGitRepo: false,
+      error: error.message
+    };
+  }
 }
 
 // Ask for follow-up improvements to the generated documentation
